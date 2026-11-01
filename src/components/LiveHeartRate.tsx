@@ -19,13 +19,24 @@ interface Props {
   status: ZoneStatus | null;
   deviceName: string | null;
   connection: 'connected' | 'connecting' | 'lost' | 'none';
+  /**
+   * When heart rate is shown big in the ring, the panel shows the stage
+   * clock in its place.
+   */
+  swappedClock?: string | null;
+  /** Tap toggles heart rate into / out of the ring. */
+  onToggleFocus?: () => void;
 }
 
+/** Big enough to read at arm's length while running. */
+const BIG_BPM = 64;
+
 /**
- * Live heart-rate panel on the timer: beating heart + bpm, the target band
- * for the current stage, and one line of coaching.
+ * Live heart-rate panel on the timer: a large bpm number coloured by zone
+ * (accent = on target, amber = too high, blue = too low), the target band,
+ * and one line of coaching. Tap to move heart rate into the ring.
  */
-export function LiveHeartRate({ phase, accent, bpm, range, maxHr, status, deviceName, connection }: Props) {
+export function LiveHeartRate({ phase, accent, bpm, range, maxHr, status, deviceName, connection, swappedClock, onToggleFocus }: Props) {
   const router = useRouter();
 
   if (connection === 'none') {
@@ -44,9 +55,10 @@ export function LiveHeartRate({ phase, accent, bpm, range, maxHr, status, device
     );
   }
 
-  const tint = statusColor(status, accent);
+  const live = connection === 'connected' && bpm !== null;
+  const tint = live ? statusColor(status, accent) : colors.textTertiary;
   let message: string;
-  if (connection !== 'connected' || bpm === null) {
+  if (!live) {
     message = connection === 'connecting' ? `Connecting to ${deviceName ?? 'sensor'}…` : `${deviceName ?? 'Sensor'} — searching for signal…`;
   } else if (!range) {
     message = 'Add your age to see target zones';
@@ -55,46 +67,69 @@ export function LiveHeartRate({ phase, accent, bpm, range, maxHr, status, device
   }
 
   return (
-    <View
-      style={styles.panel}
-      accessible
+    <PressableScale
+      onPress={onToggleFocus}
+      disabled={!onToggleFocus}
+      pressedScale={0.98}
+      accessibilityRole="button"
+      accessibilityHint={swappedClock ? 'Shows the timer in the ring again' : 'Shows heart rate large in the ring'}
       accessibilityLiveRegion="polite"
       accessibilityLabel={
-        bpm !== null
-          ? `Heart rate ${bpm}${range ? `, target ${range.low} to ${range.high}` : ''}. ${message}`
-          : message
+        bpm !== null ? `Heart rate ${bpm}${range ? `, target ${range.low} to ${range.high}` : ''}. ${message}` : message
       }
+      style={[styles.panel, live && status && status !== 'settling' ? { borderColor: tint } : null]}
     >
       <View style={styles.row}>
         <View style={styles.reading}>
-          <BeatingHeart bpm={bpm} color={bpm !== null ? tint : colors.textTertiary} size={20} />
-          <View style={{ marginLeft: 10 }}>
-            <HeartRateNumber bpm={bpm} color={colors.textTertiary} />
-          </View>
+          {swappedClock ? (
+            <View>
+              <AppText
+                maxFontSizeMultiplier={1.15}
+                style={{ fontSize: 48, lineHeight: 54, fontWeight: '300', letterSpacing: -1.5, color: colors.text, fontVariant: ['tabular-nums'] }}
+              >
+                {swappedClock}
+              </AppText>
+              <AppText variant="caption" style={{ marginTop: -2 }}>
+                left in stage
+              </AppText>
+            </View>
+          ) : (
+            <>
+              <BeatingHeart bpm={bpm} color={tint} size={26} />
+              <View style={{ marginLeft: 10 }}>
+                <HeartRateNumber bpm={bpm} size={BIG_BPM} valueColor={live ? tint : colors.textTertiary} color={colors.textSecondary} />
+              </View>
+            </>
+          )}
         </View>
         {range && maxHr ? (
           <View style={styles.gaugeCol}>
             <ZoneGauge bpm={bpm} range={range} maxHr={maxHr} accent={accent} />
-            <AppText variant="caption" style={styles.target}>
-              Target {range.low}–{range.high}
+            <AppText variant="callout" color={colors.textSecondary} style={styles.target}>
+              {range.low}–{range.high}
+            </AppText>
+            <AppText variant="caption" style={styles.targetLabel}>
+              target bpm
             </AppText>
           </View>
         ) : null}
       </View>
-      <AppText variant="caption" color={bpm !== null ? tint : colors.textTertiary} align="center" style={styles.message}>
+      <AppText variant="callout" color={tint} align="center" style={styles.message} numberOfLines={1}>
         {message}
       </AppText>
-    </View>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   panel: {
-    alignSelf: 'stretch',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     paddingHorizontal: 18,
-    paddingVertical: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
   },
   row: {
     flexDirection: 'row',
@@ -103,21 +138,26 @@ const styles = StyleSheet.create({
   reading: {
     flexDirection: 'row',
     alignItems: 'center',
-    minWidth: 112,
+    minWidth: 150,
   },
   gaugeCol: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
   },
   target: {
-    marginTop: 4,
-    fontSize: 12,
+    marginTop: 6,
+    fontSize: 18,
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
+  targetLabel: {
+    fontSize: 11,
+    textAlign: 'right',
+  },
   message: {
-    marginTop: 8,
-    fontWeight: '500',
+    marginTop: 6,
+    fontSize: 16,
+    fontWeight: '600',
   },
   connectPill: {
     alignSelf: 'center',

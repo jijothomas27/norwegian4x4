@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../../components/AppText';
 import { IconButton } from '../../components/Buttons';
 import { FadeIn } from '../../components/FadeIn';
+import { BeatingHeart, statusColor } from '../../components/HeartRate';
 import { LiveHeartRate } from '../../components/LiveHeartRate';
 import { PhaseBackdrop } from '../../components/PhaseBackdrop';
 import { PhaseStrip } from '../../components/PhaseStrip';
@@ -24,7 +25,7 @@ import { useWorkoutHeartRate } from '../../hooks/useWorkoutHeartRate';
 import { LiveGps } from '../../components/LiveGps';
 import { saveRoute } from '../../state/routes';
 import { cues, type CueOptions } from '../../lib/cues';
-import { vo2EstimateFor } from '../../state/fitness';
+import { maxHrFor, vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
 import { colors, tones } from '../../theme/tokens';
 
@@ -85,6 +86,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
       // A sustained peak above what we knew raises the learned max HR,
       // which sharpens both the zones and the VO₂ max estimate.
       let settings = state.settings;
+      const maxBefore = maxHrFor(settings);
       if (hrSummary && !isDemo) {
         const learned = learnMaxHr(settings.learnedMaxHr, hrSummary.sustainedMax || undefined);
         if (learned !== settings.learnedMaxHr) {
@@ -93,6 +95,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         }
       }
       const vo2 = hrSummary ? vo2EstimateFor(settings) : null;
+      const maxAfter = hrSummary ? maxHrFor(settings) : null;
       const entry = addSession({
         protocolId: def.id,
         startedAt: result.startedAt,
@@ -103,6 +106,13 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         completed,
         hr: hrSummary ?? undefined,
         vo2Estimate: vo2?.value,
+        maxHr: maxAfter
+          ? {
+              bpm: maxAfter.bpm,
+              source: maxAfter.source,
+              previous: maxBefore && maxAfter.bpm > maxBefore.bpm ? maxBefore.bpm : undefined,
+            }
+          : undefined,
         gps: gpsResult?.gps,
       });
       if (gpsResult?.gps.hasRoute) await saveRoute(entry.id, gpsResult.route).catch(() => {});
@@ -227,7 +237,18 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   const accent = tones[tone].accent;
   const next = phases[position.index + 1];
   const paused = status === 'paused';
-  const ringSize = Math.max(200, Math.min(width - 72, height * 0.34, 320));
+  const hrShown = heart.connection !== 'none';
+  // The heart-rate panel is taller than it used to be, so give the ring a little less height when it's showing.
+  const ringSize = Math.max(200, Math.min(width - 72, height * (hrShown ? 0.3 : 0.34), 320));
+  const clockSize = Math.min(92, Math.round(ringSize * 0.33));
+  // Heart rate big in the ring (and the clock in the panel) — tap either to swap.
+  const hrFocus = hrShown && state.settings.hrFocus === true;
+  const hrLive = heart.connection === 'connected' && heart.bpm !== null;
+  const hrTint = hrLive ? statusColor(heart.status, accent) : colors.textTertiary;
+  const toggleHrFocus = () => {
+    cues.tap(cueOpts);
+    updateSettings({ hrFocus: !hrFocus });
+  };
   const remainingTotal = timer.totalMs - timer.elapsedMs;
 
   const roundLabel =
@@ -302,13 +323,41 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
 
               <ProgressRing size={ringSize} progress={position.phaseProgress} color={accent} strokeWidth={3}>
                 <Pressable
+                  onPress={hrShown ? toggleHrFocus : undefined}
                   onLongPress={toggleDevSpeed}
                   delayLongPress={600}
-                  accessibilityLabel={`${formatClock(position.phaseRemainingMs)} remaining in ${phase.title}`}
+                  style={{ alignItems: 'center' }}
+                  accessibilityRole={hrShown ? 'button' : undefined}
+                  accessibilityHint={hrShown ? (hrFocus ? 'Shows the timer here' : 'Shows heart rate here') : undefined}
+                  accessibilityLabel={
+                    hrFocus
+                      ? `Heart rate ${heart.bpm ?? 'unavailable'}`
+                      : `${formatClock(position.phaseRemainingMs)} remaining in ${phase.title}`
+                  }
                 >
-                  <AppText variant="clock" style={[styles.tabular, paused && { opacity: 0.45 }]}>
-                    {formatClock(position.phaseRemainingMs)}
-                  </AppText>
+                  {hrFocus ? (
+                    <>
+                      <BeatingHeart bpm={hrLive ? heart.bpm : null} color={hrTint} size={22} />
+                      <AppText
+                        variant="clock"
+                        maxFontSizeMultiplier={1}
+                        style={[styles.tabular, { fontSize: clockSize + 8, fontWeight: '400', color: hrLive ? hrTint : colors.textTertiary }, paused && { opacity: 0.45 }]}
+                      >
+                        {hrLive ? heart.bpm : '—'}
+                      </AppText>
+                      <AppText variant="eyebrow" color={colors.textSecondary}>
+                        bpm{heart.range ? `  ·  ${heart.range.low}–${heart.range.high}` : ''}
+                      </AppText>
+                    </>
+                  ) : (
+                    <AppText
+                      variant="clock"
+                      maxFontSizeMultiplier={1}
+                      style={[styles.tabular, { fontSize: clockSize }, paused && { opacity: 0.45 }]}
+                    >
+                      {formatClock(position.phaseRemainingMs)}
+                    </AppText>
+                  )}
                 </Pressable>
                 {paused ? (
                   <AppText variant="eyebrow" color={colors.text} style={{ marginTop: 4 }}>
@@ -350,6 +399,8 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
             status={heart.status}
             deviceName={heart.deviceName}
             connection={heart.connection}
+            swappedClock={hrFocus ? formatClock(position.phaseRemainingMs) : null}
+            onToggleFocus={toggleHrFocus}
           />
           <LiveGps
             state={gps.state}
@@ -506,7 +557,7 @@ const styles = StyleSheet.create({
   hr: {
     marginTop: 12,
     marginBottom: 18,
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
   dot: {
     width: 7,

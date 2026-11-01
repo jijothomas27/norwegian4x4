@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../components/AppText';
 import { GhostButton, PrimaryButton } from '../components/Buttons';
 import { FadeIn } from '../components/FadeIn';
+import { FitnessCard } from '../components/FitnessCard';
 import { PhaseBackdrop } from '../components/PhaseBackdrop';
 import { ProgressRing } from '../components/ProgressRing';
 import { RouteSketch } from '../components/RouteSketch';
@@ -13,7 +14,7 @@ import { buildPhases, getProtocol, normalizeConfig } from '../domain/protocols';
 import { formatMinutes } from '../domain/timeline';
 import { defaultDistanceUnit, formatDistance, formatPace, type DistanceUnit } from '../domain/track';
 import type { SessionEntry } from '../state/model';
-import { formatLongDate, formatNumber, formatTime } from '../lib/format';
+import { formatLongDate, formatTime } from '../lib/format';
 import { useStore } from '../state/store';
 import { colors, radius } from '../theme/tokens';
 
@@ -32,8 +33,7 @@ export default function SummaryScreen() {
   }
 
   const def = getProtocol(session.protocolId);
-  const prevEstimate = state.sessions.find((s) => s.id !== session.id && s.startedAt < session.startedAt && s.vo2Estimate !== undefined)
-    ?.vo2Estimate;
+  const isLatestWithHr = state.sessions.find((s) => s.hr !== undefined)?.id === session.id;
   const logged = state.metrics.some((m) => m.sessionId === session.id);
 
   const unit: DistanceUnit = state.settings.distanceUnit ?? defaultDistanceUnit(Intl.DateTimeFormat().resolvedOptions().locale);
@@ -86,15 +86,9 @@ export default function SummaryScreen() {
             <Stat label="Started" value={formatTime(session.startedAt)} />
           </FadeIn>
 
-          {session.vo2Estimate !== undefined ? (
-            <FadeIn delay={420} style={styles.hrRow}>
-              <Ionicons name="analytics-outline" size={14} color={colors.cyan} />
-              <AppText variant="caption" color={colors.textSecondary} style={{ marginLeft: 8 }}>
-                Estimated VO₂ max {formatNumber(session.vo2Estimate)}
-                {prevEstimate !== undefined && Math.abs(session.vo2Estimate - prevEstimate) >= 0.1
-                  ? ` (${session.vo2Estimate > prevEstimate ? '+' : '−'}${formatNumber(Math.abs(session.vo2Estimate - prevEstimate))})`
-                  : ''}
-              </AppText>
+          {session.hr ? (
+            <FadeIn delay={420} style={{ alignSelf: 'stretch' }}>
+              <FitnessCard session={session} isLatestWithHr={isLatestWithHr} />
             </FadeIn>
           ) : null}
 
@@ -146,6 +140,11 @@ export default function SummaryScreen() {
               onPress={() => router.push({ pathname: '/log', params: { sessionId: session.id } })}
             />
           )}
+          <GhostButton
+            label="Share workout"
+            icon="share-social-outline"
+            onPress={() => router.push({ pathname: '/share', params: { id: session.id } })}
+          />
           <PrimaryButton label="Done" onPress={done} accent={colors.lavender} />
         </FadeIn>
       </ScrollView>

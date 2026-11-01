@@ -38,6 +38,8 @@ export interface SessionEntry {
   };
   /** Heart-rate-ratio VO₂ max estimate computed when the session ended. */
   vo2Estimate?: number;
+  /** Max heart rate in effect after this session; `previous` is set when the session raised it. */
+  maxHr?: { bpm: number; source: 'measured' | 'workouts' | 'age'; previous?: number };
 }
 
 export interface MetricEntry {
@@ -84,6 +86,8 @@ export interface Settings {
   learnedMaxHrAt?: number;
   /** Personal VO₂ factor calibrated from a logged reference reading. */
   vo2Factor?: number;
+  /** Workout screen: show heart rate big inside the ring (and the clock in the panel). */
+  hrFocus?: boolean;
 }
 
 export interface PersistedState {
@@ -160,6 +164,7 @@ export function parsePersisted(raw: string | null): PersistedState {
     learnedMaxHr: num(s.learnedMaxHr),
     learnedMaxHrAt: num(s.learnedMaxHrAt),
     vo2Factor: num(s.vo2Factor),
+    hrFocus: typeof s.hrFocus === 'boolean' ? s.hrFocus : undefined,
   };
 
   return { version: 1, sessions, metrics, settings };
