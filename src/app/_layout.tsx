@@ -4,6 +4,7 @@ import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 
 import { HeartRateProvider } from '../hr/HeartRateProvider';
+import { useApplyVoice } from '../hooks/useVoice';
 import { StoreProvider } from '../state/store';
 import { colors } from '../theme/tokens';
 
@@ -29,6 +30,7 @@ export default function RootLayout() {
     <StoreProvider>
       <HeartRateProvider>
         <ThemeProvider value={theme}>
+          <VoiceSetup />
           <StatusBar style="light" />
           <Stack
             screenOptions={{
@@ -48,10 +50,17 @@ export default function RootLayout() {
             />
             <Stack.Screen name="log" options={{ presentation: 'modal' }} />
             <Stack.Screen name="heart-rate" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="voice" options={{ presentation: 'modal' }} />
             <Stack.Screen name="resting-check" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
           </Stack>
         </ThemeProvider>
       </HeartRateProvider>
     </StoreProvider>
   );
+}
+
+/** Applies the chosen cue voice (needs the store, so it lives inside the providers). */
+function VoiceSetup() {
+  useApplyVoice();
+  return null;
 }

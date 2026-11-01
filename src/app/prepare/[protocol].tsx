@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { requestWorkoutNotificationPermission } from '../../../modules/tempo-workout';
+import { requestWorkoutLocationPermission, requestWorkoutNotificationPermission } from '../../../modules/tempo-workout';
 import { AppText } from '../../components/AppText';
 import { IconButton, PrimaryButton } from '../../components/Buttons';
 import { Segmented, Stepper, ToggleRow } from '../../components/Controls';
@@ -53,6 +53,7 @@ function PrepareScreen({ def }: { def: ProtocolDef }) {
 
   const begin = async () => {
     await requestWorkoutNotificationPermission();
+    await requestWorkoutLocationPermission();
     router.push({
       pathname: '/workout/[protocol]',
       params: { protocol: def.id, warmup: String(config.warmupMin), rounds: String(config.rounds) },
@@ -226,6 +227,14 @@ function PrepareScreen({ def }: { def: ProtocolDef }) {
                 onChange={(haptics) => updateSettings({ haptics })}
                 accent={def.accent}
               />
+              <View style={styles.stageDivider} />
+              <PressableScale onPress={() => router.push('/voice')} accessibilityRole="button" style={styles.linkRow}>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="callout">Voice & units</AppText>
+                  <AppText variant="caption">Choose a more natural voice · miles or kilometres</AppText>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+              </PressableScale>
             </View>
           </FadeIn>
 
@@ -349,6 +358,11 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   adjustRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  linkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 14,

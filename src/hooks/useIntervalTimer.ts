@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useMemo, useReducer } from 'react';
 import { AppState } from 'react-native';
 
-import { clockElapsedMs, clockReducer, initialClock, type ClockState } from '../domain/clock';
+import { clockElapsedMs, clockReducer, initialClock, wallToTimeline, type ClockState } from '../domain/clock';
 import { locate, phaseOffsetsMs, totalDurationMs, workRoundsCompleted, type TimelinePosition } from '../domain/timeline';
 import type { Phase } from '../domain/types';
 
@@ -86,9 +86,11 @@ export function useIntervalTimer(phases: readonly Phase[], handlers: TimerHandle
   }, [clock.status]);
 
   const start = useCallback(() => dispatch({ type: 'start', now: Date.now(), totalMs }), [totalMs]);
-  const pause = useCallback(() => dispatch({ type: 'pause', now: Date.now() }), []);
-  const resume = useCallback(() => dispatch({ type: 'resume', now: Date.now() }), []);
-  const skip = useCallback(() => dispatch({ type: 'skip', now: Date.now(), offsets }), [offsets]);
+  // `at` lets a notification button apply at the moment it was pressed, even
+  // if the app only hears about it a little later.
+  const pause = useCallback((at?: number) => dispatch({ type: 'pause', now: at ?? Date.now() }), []);
+  const resume = useCallback((at?: number) => dispatch({ type: 'resume', now: at ?? Date.now() }), []);
+  const skip = useCallback((at?: number) => dispatch({ type: 'skip', now: at ?? Date.now(), offsets }), [offsets]);
   /** Development helper: run the clock N× faster to preview a full session. */
   const setSpeed = useCallback((factor: number) => dispatch({ type: 'speed', now: Date.now(), factor }), []);
 
@@ -103,8 +105,16 @@ export function useIntervalTimer(phases: readonly Phase[], handlers: TimerHandle
    * app is in the background, so the rendered `position` can be stale when a
    * heart-rate reading arrives — this is always exact.
    */
-  const positionAt = useCallback((at: number) => locate(phases, clockElapsedMs(clock, at)), [clock, phases]);
+  const positionAt = useCallback(
+    (at: number): TimelinePosition | null => {
+      const ms = wallToTimeline(clock, at);
+      return ms === null ? null : locate(phases, ms);
+    },
+    [clock, phases],
+  );
   const elapsedAt = useCallback((at: number) => clockElapsedMs(clock, at), [clock]);
+  /** Workout-timeline ms for a past wall-clock moment, or null if not running then. */
+  const toTimeline = useCallback((at: number) => wallToTimeline(clock, at), [clock]);
 
   return {
     status: clock.status,
@@ -122,6 +132,7 @@ export function useIntervalTimer(phases: readonly Phase[], handlers: TimerHandle
     setSpeed,
     positionAt,
     elapsedAt,
+    toTimeline,
     /** Changes only on start / pause / resume / skip / speed — when the cue schedule must be rebuilt. */
     anchor: `${clock.status}:${clock.baseMs}:${clock.runStartedAt ?? '-'}:${clock.speed}`,
   };

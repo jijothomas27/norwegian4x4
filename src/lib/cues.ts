@@ -19,6 +19,25 @@ import type { Phase } from '../domain/types';
  */
 
 let scheduledInBackground = false;
+let voiceId: string | null = null;
+
+/** Voice for every cue, native and in-app (null = phone default). */
+export function setCueVoice(id: string | null) {
+  voiceId = id;
+  backgroundSession?.setVoice(id).catch(() => {});
+}
+
+/** Say a sample sentence in a given voice (voice picker preview). */
+export function previewVoice(id: string | null, text: string) {
+  if (backgroundSession) {
+    backgroundSession
+      .setVoice(id)
+      .then(() => backgroundSession?.speak(text, null))
+      .catch(() => {});
+    return;
+  }
+  say(text, id);
+}
 
 /** Called by the workout screen while the background session owns scheduled cues. */
 export function setScheduledCuesInBackground(on: boolean) {
@@ -38,10 +57,10 @@ function safe(promise: Promise<unknown> | void) {
   }
 }
 
-function say(text: string) {
+function say(text: string, voice: string | null = voiceId) {
   try {
     void Speech.stop();
-    Speech.speak(text, { rate: 0.96, pitch: 1.0 });
+    Speech.speak(text, { rate: 0.96, pitch: 1.0, ...(voice ? { voice } : {}) });
   } catch {
     // Speech unavailable (e.g. some web browsers) — fail silently.
   }

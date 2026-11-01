@@ -1,8 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- Keeps the workout clock, voice cues and heart-rate stream alive while
-       another app is in front or the screen is off. -->
+       another app is in front or the screen is off, and records GPS. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+  <!-- GPS pace, distance and route. Only used while a workout is running. -->
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
   <uses-permission android:name="android.permission.VIBRATE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -17,6 +21,6 @@
     <service
       android:name="expo.modules.tempoworkout.WorkoutService"
       android:exported="false"
-      android:foregroundServiceType="mediaPlayback" />
+      android:foregroundServiceType="mediaPlayback|location" />
   </application>
 </manifest>

@@ -117,4 +117,23 @@ Android pauses an app's JavaScript timers once another app is in front, so in-ap
 - A "workout in progress" notification shows the current stage with a live countdown; tap it to return.
 - Being a foreground service keeps the Bluetooth heart-rate stream alive in the background too.
 
+- The notification has **Pause / Resume / Skip** buttons. Pause and resume are handled by the service itself (so they work even if the app is asleep) and passed on to the timer with the exact time you pressed them.
+
 It needs a native build (`eas build --profile preview --platform android`); Expo Go, iOS and web fall back to in-app cues.
+
+## GPS: pace, distance and route
+
+With location permission (asked the first time you tap Begin), the background service records GPS once a second for the length of the workout.
+
+- **Live:** distance and your pace for the current stage, under the heart rate. On interval walks, a **brisk-pace target** learned from your recent walks (preferring walks where your heart rate was in zone); with no heart-rate sensor connected, Tempo nudges you by voice when you're more than ~7% slower than it.
+- **Summary / journal:** total distance, hard-interval pace and climb; a per-round table (pace, distance, heart-rate recovery); and a route sketch coloured by stage — drawn with SVG, so no map API key or network is needed. Tap any session in the journal to open it.
+- Fixes with poor accuracy and impossible jumps are dropped, paused time is left out (`src/domain/track.ts`, `tests/track.test.ts`). Routes are stored per session under their own storage key (`src/state/routes.ts`).
+- `plugins/withWorkoutLocation.js` makes sure the location permission is declared for modern Android — react-native-ble-manager's `neverForLocation` option would otherwise cap it at Android 11.
+
+## Heart-rate recovery
+
+How far your heart rate falls in the first 60 seconds after each hard interval (average of the last 15 s of the interval vs. the reading at 60 s). It's one of the clearest fitness signals: the drop gets bigger as you get fitter. Shown per round in the summary and as a trend in the journal.
+
+## Voice
+
+Cues use the phone's text-to-speech. Tempo picks the most natural **offline** voice automatically (Android reports a quality score per voice; network voices are skipped so cues work with poor signal). Choose another under *Workout › Cues › Voice & units* — tapping a voice plays a sample. Install more voices in Android Settings › System › Languages › Text-to-speech output.

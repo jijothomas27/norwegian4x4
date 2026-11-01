@@ -27,7 +27,7 @@ export function useWorkoutHeartRate(
   timerStatus: TimerStatus,
   cueOpts: CueOptions,
   /** Exact position for a given time — readings keep arriving while the app is in the background. */
-  positionAt?: (at: number) => TimelinePosition,
+  positionAt?: (at: number) => TimelinePosition | null,
 ) {
   const hr = useHeartRate();
   const { state } = useStore();
@@ -59,11 +59,19 @@ export function useWorkoutHeartRate(
     if (timerStatus !== 'running' || hr.bpm === null || hr.at === null) return;
     const at = hr.at;
     const pos = positionAt ? positionAt(at) : position;
-    if (pos.done) return;
+    if (!pos || pos.done) return; // paused at that moment, or after the end
     const phase = pos.phase;
     const range = maxHr ? bpmRange(phase.target, maxHr.bpm) : null;
     const live = classify(hr.bpm, range ?? { low: 0, high: 999 }, pos.phaseElapsedMs / 1000, phase.target.settleSec);
-    stats.current = addHrSample(stats.current, { at, bpm: hr.bpm, phaseKind: phase.kind, inZone: live === 'in' });
+    stats.current = addHrSample(stats.current, {
+      at,
+      bpm: hr.bpm,
+      phaseKind: phase.kind,
+      inZone: live === 'in',
+      round: phase.round,
+      phaseElapsedMs: pos.phaseElapsedMs,
+      phaseRemainingMs: pos.phaseRemainingMs,
+    });
 
     if (!range) return;
     if (coachedPhase.current !== phase.key) {

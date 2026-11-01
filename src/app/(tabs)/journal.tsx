@@ -12,6 +12,7 @@ import { ActionSheet } from '../../components/Sheet';
 import { TrendCard } from '../../components/TrendCard';
 import { Vo2EstimateCard } from '../../components/Vo2EstimateCard';
 import { getProtocol } from '../../domain/protocols';
+import { defaultDistanceUnit } from '../../domain/track';
 import { kgToUnit } from '../../lib/format';
 import type { JournalEntry } from '../../state/model';
 import { journalSections, metricSeries } from '../../state/selectors';
@@ -40,6 +41,16 @@ export default function JournalScreen() {
       state.sessions
         .filter((s) => s.vo2Estimate !== undefined)
         .map((s) => ({ at: s.startedAt, value: s.vo2Estimate as number }))
+        .sort((a, b) => a.at - b.at),
+    [state.sessions],
+  );
+
+  const distanceUnit = state.settings.distanceUnit ?? defaultDistanceUnit(Intl.DateTimeFormat().resolvedOptions().locale);
+  const recoveryTrend = useMemo(
+    () =>
+      state.sessions
+        .filter((s) => s.hr?.recoveryAvg !== undefined)
+        .map((s) => ({ at: s.startedAt, value: s.hr?.recoveryAvg as number }))
         .sort((a, b) => a.at - b.at),
     [state.sessions],
   );
@@ -83,6 +94,20 @@ export default function JournalScreen() {
         <Vo2EstimateCard estimate={estimate} history={estimateHistory} />
       </FadeIn>
 
+      {recoveryTrend.length > 0 ? (
+        <FadeIn delay={160} style={[styles.trends, { marginTop: 12 }]}>
+          <TrendCard
+            label="HR recovery · 60 s"
+            unit="bpm drop"
+            points={recoveryTrend}
+            color={colors.crimson}
+            decimals={0}
+            higherIsBetter
+            emptyHint="Appears after a workout with heart rate"
+          />
+        </FadeIn>
+      ) : null}
+
       <FadeIn delay={180}>
         <GhostButton label="Log metrics" icon="add" onPress={() => router.push('/log')} style={styles.logButton} />
       </FadeIn>
@@ -115,6 +140,8 @@ export default function JournalScreen() {
             entry={item}
             weightUnit={unit}
             linkedSessionName={item.type === 'metric' && item.sessionId ? sessionNames.get(item.sessionId) : undefined}
+            distanceUnit={distanceUnit}
+            onPress={item.type === 'session' ? () => router.push({ pathname: '/summary', params: { id: item.id, from: 'journal' } }) : undefined}
             onLongPress={() => setPendingDelete(item)}
           />
         )}

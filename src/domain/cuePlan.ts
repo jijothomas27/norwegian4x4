@@ -19,6 +19,10 @@ export interface CueStatus {
   body?: string;
   /** Wall-clock end of the current stage — the notification counts down to it. */
   endsAt?: number | null;
+  /** Shows Resume instead of Pause / Skip in the notification. */
+  paused?: boolean;
+  /** False on the last stage (nothing to skip to). */
+  canSkip?: boolean;
 }
 
 export interface PlannedCue {
@@ -83,7 +87,7 @@ export function planCues(input: CuePlanInput): CuePlan {
       cues: [],
       status: pos.done
         ? { title: 'Workout complete', body: 'Tap to see your summary' }
-        : { title: `Paused · ${stageTitle(pos.phase)}`, body: 'Tap to return to Tempo' },
+        : { title: `Paused · ${stageTitle(pos.phase)}`, body: 'Tap to return to Tempo', paused: true, canSkip: pos.index < phases.length - 1 },
       announcedIndex: null,
     };
   }
@@ -110,7 +114,7 @@ export function planCues(input: CuePlanInput): CuePlan {
         vibrate: buzz(phase.kind === 'work' ? 'hard' : 'easy'),
         skipIfLateMs: 0,
         final: false,
-        status: { title: stageTitle(phase), body: phase.guidance, endsAt: wall(end) },
+        status: { title: stageTitle(phase), body: phase.guidance, endsAt: wall(end), canSkip: i < phases.length - 1 },
       });
     }
 
@@ -154,7 +158,7 @@ export function planCues(input: CuePlanInput): CuePlan {
   const current = pos.phase;
   return {
     cues: cues.sort((a, b) => a.at - b.at),
-    status: { title: stageTitle(current), body: current.guidance, endsAt: wall(offsets[pos.index + 1]) },
+    status: { title: stageTitle(current), body: current.guidance, endsAt: wall(offsets[pos.index + 1]), canSkip: pos.index < phases.length - 1 },
     announcedIndex,
   };
 }

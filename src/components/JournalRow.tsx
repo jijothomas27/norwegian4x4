@@ -2,6 +2,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { getProtocol } from '../domain/protocols';
 import { formatMinutes } from '../domain/timeline';
+import { formatDistance, type DistanceUnit } from '../domain/track';
 import { formatNumber, formatTime, kgToUnit } from '../lib/format';
 import type { JournalEntry, WeightUnit } from '../state/model';
 import { colors } from '../theme/tokens';
@@ -13,21 +14,25 @@ interface Props {
   weightUnit: WeightUnit;
   /** Name of the workout a metric log was attached to, if any. */
   linkedSessionName?: string;
+  distanceUnit?: DistanceUnit;
+  /** Sessions: open the workout summary. */
+  onPress?: () => void;
   onLongPress: () => void;
 }
 
 /** A single line in the journal feed — a workout or a metrics log. */
-export function JournalRow({ entry, weightUnit, linkedSessionName, onLongPress }: Props) {
+export function JournalRow({ entry, weightUnit, linkedSessionName, distanceUnit = 'km', onPress, onLongPress }: Props) {
   if (entry.type === 'session') {
     const protocol = getProtocol(entry.protocolId);
     const rounds = `${entry.roundsCompleted}/${entry.totalRounds} rounds`;
     return (
       <PressableScale
+        onPress={onPress}
         onLongPress={onLongPress}
         delayLongPress={350}
         pressedScale={0.99}
         accessibilityLabel={`${protocol.name}, ${formatMinutes(entry.durationSec)}, ${rounds}${entry.completed ? '' : ', ended early'}, at ${formatTime(entry.startedAt)}`}
-        accessibilityHint="Long press to delete"
+        accessibilityHint="Tap for details, long press to delete"
         style={styles.row}
       >
         <View style={[styles.marker, { backgroundColor: protocol.accent }]} />
@@ -38,6 +43,7 @@ export function JournalRow({ entry, weightUnit, linkedSessionName, onLongPress }
             {'  ·  '}
             {rounds}
             {entry.completed ? '' : '  ·  ended early'}
+            {entry.gps ? `  ·  ${formatDistance(entry.gps.distanceM, distanceUnit)}` : ''}
             {entry.hr ? `  ·  avg ${entry.hr.avg} bpm` : ''}
           </AppText>
         </View>

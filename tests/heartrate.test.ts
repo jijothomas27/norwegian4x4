@@ -83,3 +83,27 @@ test('recognises the Heart Rate service UUID in every form', () => {
     assert.ok(!isHeartRateServiceUuid(u), u);
   }
 });
+
+test('heart-rate recovery: drop 60 s into the recovery after each hard interval', async () => {
+  const { addHrSample, EMPTY_HR_STATS, summarizeHr } = await import('../src/domain/hrStats.ts');
+  let s = EMPTY_HR_STATS;
+  let t = 0;
+  const add = (bpm: number, phaseKind: 'work' | 'rest', round: number, elapsed: number, remaining: number) => {
+    t += 1000;
+    s = addHrSample(s, { at: t, bpm, phaseKind, inZone: true, round, phaseElapsedMs: elapsed, phaseRemainingMs: remaining });
+  };
+  for (const [round, peak, after] of [[1, 160, 130], [2, 165, 140]] as const) {
+    for (let i = 0; i < 20; i++) add(peak, 'work', round, 220_000 + i * 1000, 20_000 - i * 1000);
+    for (let i = 0; i < 70; i++) add(i < 60 ? peak - i * 0.5 : after, 'rest', round, i * 1000, 180_000 - i * 1000);
+  }
+  const summary = summarizeHr(s)!;
+  assert.deepEqual(summary.recovery, [30, 25]);
+  assert.equal(summary.recoveryAvg, 28);
+});
+
+test('no recovery without readings at the end of the interval', async () => {
+  const { addHrSample, EMPTY_HR_STATS, summarizeHr } = await import('../src/domain/hrStats.ts');
+  let s = EMPTY_HR_STATS;
+  for (let i = 0; i < 70; i++) s = addHrSample(s, { at: i * 1000, bpm: 120, phaseKind: 'rest', inZone: true, round: 1, phaseElapsedMs: i * 1000 });
+  assert.equal(summarizeHr(s)?.recovery, undefined);
+});

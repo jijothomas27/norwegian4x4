@@ -19,7 +19,10 @@ import { learnMaxHr } from '../../domain/vo2';
 import type { ProtocolDef, WorkoutConfig } from '../../domain/types';
 import { useBackgroundSession } from '../../hooks/useBackgroundSession';
 import { useIntervalTimer, type TimerResult } from '../../hooks/useIntervalTimer';
+import { useWorkoutGps, type GpsResult } from '../../hooks/useWorkoutGps';
 import { useWorkoutHeartRate } from '../../hooks/useWorkoutHeartRate';
+import { LiveGps } from '../../components/LiveGps';
+import { saveRoute } from '../../state/routes';
 import { cues, type CueOptions } from '../../lib/cues';
 import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
@@ -70,10 +73,15 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   // The heart-rate hook needs the timer's position, so it's created after the
   // timer; finish() reaches its summary through this ref.
   const hrSummaryRef = useRef<() => { summary: HrSummary | null; isDemo: boolean }>(summarizeNone);
+  const gpsFinishRef = useRef<() => Promise<GpsResult | null>>(async () => null);
+  const finishing = useRef(false);
 
   const finish = useCallback(
-    (result: TimerResult, completed: boolean) => {
+    async (result: TimerResult, completed: boolean) => {
+      if (finishing.current) return;
+      finishing.current = true;
       const { summary: hrSummary, isDemo } = hrSummaryRef.current();
+      const gpsResult = await gpsFinishRef.current().catch(() => null);
       // A sustained peak above what we knew raises the learned max HR,
       // which sharpens both the zones and the VO₂ max estimate.
       let settings = state.settings;
@@ -95,7 +103,9 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         completed,
         hr: hrSummary ?? undefined,
         vo2Estimate: vo2?.value,
+        gps: gpsResult?.gps,
       });
+      if (gpsResult?.gps.hasRoute) await saveRoute(entry.id, gpsResult.route).catch(() => {});
       router.replace({ pathname: '/summary', params: { id: entry.id } });
     },
     [addSession, config.rounds, def.id, router, state.settings, updateSettings],
@@ -116,7 +126,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
     },
     onComplete: (result) => {
       cues.complete(cueOpts);
-      finish(result, true);
+      void finish(result, true);
     },
   });
 
@@ -128,6 +138,12 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   useEffect(() => {
     hrSummaryRef.current = () => ({ summary: getSummary(), isDemo });
   }, [getSummary, isDemo]);
+
+  const gps = useWorkoutGps(def, phases, timer, timer.position, cueOpts, heart.connection === 'connected' && heart.bpm !== null);
+  const gpsFinish = gps.finish;
+  useEffect(() => {
+    gpsFinishRef.current = gpsFinish;
+  }, [gpsFinish]);
 
   // ── Lead-in "3 · 2 · 1" before the clock starts ───────────────────────────
   const [leadIn, setLeadIn] = useState(LEAD_IN_SECONDS);
@@ -188,7 +204,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
             label: 'End & save',
             onPress: () => {
               setSheetOpen(false);
-              finish(timer.snapshot(), false);
+              void finish(timer.snapshot(), false);
             },
           } satisfies SheetAction,
         ]
@@ -334,6 +350,13 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
             status={heart.status}
             deviceName={heart.deviceName}
             connection={heart.connection}
+          />
+          <LiveGps
+            state={gps.state}
+            unit={gps.unit}
+            distanceM={gps.distanceM}
+            stagePaceSecPerKm={gps.stagePaceSecPerKm}
+            targetPaceSecPerKm={leadIn > 0 || phase.kind !== 'work' ? null : gps.targetPaceSecPerKm}
           />
         </View>
 

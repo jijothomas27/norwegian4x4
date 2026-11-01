@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 
-import { backgroundSession } from '../../modules/tempo-workout';
+import { backgroundSession, type WorkoutActionEvent } from '../../modules/tempo-workout';
 import { planCues } from '../domain/cuePlan';
 import type { Phase } from '../domain/types';
 import type { TimelinePosition } from '../domain/timeline';
@@ -15,7 +15,10 @@ interface TimerLike {
   speed: number;
   anchor: string;
   elapsedAt: (at: number) => number;
-  positionAt: (at: number) => TimelinePosition;
+  positionAt: (at: number) => TimelinePosition | null;
+  pause: (at?: number) => void;
+  resume: (at?: number) => void;
+  skip: (at?: number) => void;
 }
 
 /**
@@ -56,7 +59,7 @@ export function useBackgroundSession(phases: readonly Phase[], timer: TimerLike,
       voice: opts.voice,
       haptics: opts.haptics,
       // Never announce the same stage twice (e.g. resuming exactly at a boundary).
-      announceCurrent: timer.positionAt(now).index !== announced.current,
+      announceCurrent: timer.positionAt(now)?.index !== announced.current,
     });
     if (plan.announcedIndex !== null) announced.current = plan.announcedIndex;
     backgroundSession
@@ -70,4 +73,15 @@ export function useBackgroundSession(phases: readonly Phase[], timer: TimerLike,
   useEffect(() => {
     sync();
   }, [timer.anchor, opts.voice, opts.haptics]);
+
+  // Pause / Resume / Skip pressed in the notification.
+  const onAction = useEffectEvent((e: WorkoutActionEvent) => {
+    if (e.action === 'pause' && timer.status === 'running') timer.pause(e.at);
+    else if (e.action === 'resume' && timer.status === 'paused') timer.resume(e.at);
+    else if (e.action === 'skip' && (timer.status === 'running' || timer.status === 'paused')) timer.skip(e.at);
+  });
+  useEffect(() => {
+    const sub = backgroundSession?.addListener('onAction', (e) => onAction(e));
+    return () => sub?.remove();
+  }, []);
 }

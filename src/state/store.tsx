@@ -19,6 +19,7 @@ import {
   type SessionEntry,
   type Settings,
 } from './model';
+import { deleteRoute } from './routes';
 
 const STORAGE_KEY = '@tempo/journal/v1';
 const SAVE_DEBOUNCE_MS = 250;
@@ -115,7 +116,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return entry;
   }, []);
 
-  const deleteSession = useCallback((id: string) => dispatch({ type: 'deleteSession', id }), []);
+  const deleteSession = useCallback((id: string) => {
+    dispatch({ type: 'deleteSession', id });
+    deleteRoute(id);
+  }, []);
   const deleteMetric = useCallback((id: string) => dispatch({ type: 'deleteMetric', id }), []);
   const updateSettings = useCallback((patch: Partial<Settings>) => dispatch({ type: 'updateSettings', patch }), []);
 

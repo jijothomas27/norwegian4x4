@@ -27,6 +27,9 @@ object CueSpeaker {
   private var outstanding = 0
   private var counter = 0
   private var audioManager: AudioManager? = null
+  /** Voice chosen in Tempo's settings (null = the phone's default). */
+  private var voiceName: String? = null
+  private val waitingForVoices = ArrayList<(List<Map<String, Any?>>) -> Unit>()
   private var focusRequest: AudioFocusRequest? = null
 
   private val attributes: AudioAttributes =
@@ -51,11 +54,16 @@ object CueSpeaker {
           tts?.setAudioAttributes(attributes)
           tts?.setSpeechRate(0.96f)
           tts?.setOnUtteranceProgressListener(listener)
+          applyVoice()
           pending?.let { speakNow(it) }
+          val voices = listVoices()
+          waitingForVoices.forEach { it(voices) }
         } else {
           tts?.shutdown()
           tts = null
+          waitingForVoices.forEach { it(emptyList()) }
         }
+        waitingForVoices.clear()
         pending = null
       }
     }
@@ -78,6 +86,59 @@ object CueSpeaker {
     if (outstanding <= 0) requestFocus()
     outstanding++
     engine.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), "tempo-${counter++}")
+  }
+
+  /** Use this voice from now on (null = phone default). */
+  fun setVoice(context: Context, name: String?) {
+    main.post {
+      voiceName = name
+      if (tts == null) initOnMain(context.applicationContext)
+      if (ready) applyVoice()
+    }
+  }
+
+  private fun applyVoice() {
+    val engine = tts ?: return
+    val wanted = voiceName
+    try {
+      val voice = if (wanted != null) engine.voices?.firstOrNull { it.name == wanted } else null
+      if (voice != null) {
+        engine.voice = voice
+      } else {
+        engine.defaultVoice?.let { engine.voice = it }
+      }
+    } catch (_: Exception) {
+      // Some engines throw while still loading voice data; keep the current voice.
+    }
+  }
+
+  /** Every voice the TTS engine offers, for the voice picker (resolved once TTS is ready). */
+  fun getVoices(context: Context, callback: (List<Map<String, Any?>>) -> Unit) {
+    main.post {
+      if (tts == null) initOnMain(context.applicationContext)
+      if (ready) callback(listVoices()) else waitingForVoices.add(callback)
+    }
+  }
+
+  private fun listVoices(): List<Map<String, Any?>> {
+    val engine = tts ?: return emptyList()
+    val defaultName = try { engine.defaultVoice?.name } catch (_: Exception) { null }
+    return try {
+      engine.voices.orEmpty().map { v ->
+        val features = v.features.orEmpty()
+        mapOf(
+          "id" to v.name,
+          "language" to v.locale.toLanguageTag(),
+          "quality" to v.quality,
+          "latency" to v.latency,
+          "network" to v.isNetworkConnectionRequired,
+          "installed" to !features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED),
+          "isDefault" to (v.name == defaultName),
+        )
+      }
+    } catch (_: Exception) {
+      emptyList()
+    }
   }
 
   fun stop() {

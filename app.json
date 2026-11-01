@@ -50,7 +50,8 @@
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "Tempo connects to your watch or chest strap to show live heart rate during workouts."
         }
-      ]
+      ],
+      "./plugins/withWorkoutLocation"
     ],
     "experiments": {
       "typedRoutes": false

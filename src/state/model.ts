@@ -1,4 +1,5 @@
-import type { ProtocolId } from '../domain/types';
+import type { DistanceUnit } from '../domain/track';
+import type { PhaseKind, ProtocolId } from '../domain/types';
 
 export type WeightUnit = 'kg' | 'lbs';
 
@@ -23,6 +24,17 @@ export interface SessionEntry {
     inZonePct: number | null;
     /** Highest heart rate held for 10 s. */
     sustainedMax?: number;
+    /** bpm drop 60 s after each hard interval, in round order. */
+    recovery?: number[];
+    recoveryAvg?: number;
+  };
+  /** Present when GPS was recording. The route itself is stored separately (state/routes.ts). */
+  gps?: {
+    distanceM: number;
+    climbM: number;
+    workPaceSecPerKm?: number;
+    stages: { kind: PhaseKind; round?: number; distanceM: number; paceSecPerKm?: number; climbM: number }[];
+    hasRoute: boolean;
   };
   /** Heart-rate-ratio VO₂ max estimate computed when the session ended. */
   vo2Estimate?: number;
@@ -50,6 +62,10 @@ export interface HrDevice {
 
 export interface Settings {
   weightUnit: WeightUnit;
+  /** Pace and distance; defaults from the phone's region. */
+  distanceUnit?: DistanceUnit;
+  /** Text-to-speech voice for cues; undefined = pick the best one automatically. */
+  voiceId?: string;
   voiceCues: boolean;
   haptics: boolean;
   /** Spoken "push harder / ease off" prompts when out of the target zone. */
@@ -131,6 +147,8 @@ export function parsePersisted(raw: string | null): PersistedState {
   const device = isObj(s.hrDevice) && typeof s.hrDevice.id === 'string' ? s.hrDevice : undefined;
   const settings: Settings = {
     weightUnit: s.weightUnit === 'lbs' ? 'lbs' : 'kg',
+    distanceUnit: s.distanceUnit === 'mi' || s.distanceUnit === 'km' ? s.distanceUnit : undefined,
+    voiceId: typeof s.voiceId === 'string' ? s.voiceId : undefined,
     voiceCues: typeof s.voiceCues === 'boolean' ? s.voiceCues : DEFAULT_SETTINGS.voiceCues,
     haptics: typeof s.haptics === 'boolean' ? s.haptics : DEFAULT_SETTINGS.haptics,
     voiceCoaching: typeof s.voiceCoaching === 'boolean' ? s.voiceCoaching : DEFAULT_SETTINGS.voiceCoaching,

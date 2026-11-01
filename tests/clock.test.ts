@@ -80,3 +80,27 @@ test('skips are recorded as timeline ranges', () => {
   c = clockReducer(c, { type: 'skip', now: T0 + 60_000, offsets });
   assert.deepEqual(c.skips, [[60_000, 5 * MIN]]);
 });
+
+test('wallToTimeline maps past moments through pauses and skips', async () => {
+  const { wallToTimeline } = await import('../src/domain/clock.ts');
+  let c = started();
+  c = clockReducer(c, { type: 'pause', now: T0 + 2 * MIN }); // ran 0–2 min
+  c = clockReducer(c, { type: 'resume', now: T0 + 5 * MIN }); // paused 3 min
+  c = clockReducer(c, { type: 'skip', now: T0 + 6 * MIN, offsets }); // at timeline 3 min → jump to 5 min
+  c = clockReducer(c, { type: 'tick', now: T0 + 7 * MIN });
+
+  assert.equal(wallToTimeline(c, T0 - 1), null); // before start
+  assert.equal(wallToTimeline(c, T0 + MIN), MIN);
+  assert.equal(wallToTimeline(c, T0 + 3 * MIN), null); // paused
+  assert.equal(wallToTimeline(c, T0 + 5 * MIN + 30_000), 2 * MIN + 30_000);
+  assert.equal(wallToTimeline(c, T0 + 6 * MIN + 30_000), 5 * MIN + 30_000); // after the skip
+});
+
+test('wallToTimeline stops at the end of the workout', async () => {
+  const { wallToTimeline } = await import('../src/domain/clock.ts');
+  let c = started();
+  c = clockReducer(c, { type: 'tick', now: T0 + total + 5000 });
+  assert.equal(c.status, 'complete');
+  assert.equal(wallToTimeline(c, T0 + total - 1000), total - 1000);
+  assert.equal(wallToTimeline(c, T0 + total + 1000), null);
+});
