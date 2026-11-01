@@ -14,6 +14,7 @@ import { pickShareStats } from '../domain/shareStats';
 import { formatMinutes } from '../domain/timeline';
 import { defaultDistanceUnit, type DistanceUnit } from '../domain/track';
 import type { SessionEntry } from '../state/model';
+import { useHrSeries } from '../state/hrSeries';
 import { useStore } from '../state/store';
 import { colors } from '../theme/tokens';
 
@@ -42,10 +43,12 @@ export default function ShareScreen() {
   const { state } = useStore();
   const cardRef = useRef<ComponentRef<typeof View>>(null);
   const [showRoute, setShowRoute] = useState(true);
+  const [showHr, setShowHr] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const session = state.sessions.find((s) => s.id === id);
+  const hrSeries = useHrSeries(id, session?.hasHrSeries === true);
   if (!session) return state.hydrated ? <Redirect href="/" /> : <View style={styles.root} />;
 
   const def = getProtocol(session.protocolId);
@@ -53,7 +56,17 @@ export default function ShareScreen() {
   const unit: DistanceUnit = state.settings.distanceUnit ?? defaultDistanceUnit(Intl.DateTimeFormat().resolvedOptions().locale);
   const cardWidth = Math.min(width - 40, 420);
   const caption = shareCaption(session, unit);
-  const routeShown = showRoute && session.gps?.hasRoute === true;
+  const hrShown = showHr && !!hrSeries;
+  const routeShown = !hrShown && showRoute && session.gps?.hasRoute === true;
+  // The graph replaces the route: one picture on the card.
+  const toggleHr = (on: boolean) => {
+    setShowHr(on);
+    if (on) setShowRoute(false);
+  };
+  const toggleRoute = (on: boolean) => {
+    setShowRoute(on);
+    if (on) setShowHr(false);
+  };
 
   async function shareText() {
     setError(null);
@@ -79,7 +92,7 @@ export default function ShareScreen() {
         quality: 1,
         result: 'tmpfile',
         width: 1080,
-        height: Math.round(1080 * shareCardAspect(routeShown)),
+        height: Math.round(1080 * shareCardAspect(routeShown || hrShown)),
         fileName: `tempo-${session!.id}`,
       });
       await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your workout' });
@@ -103,7 +116,32 @@ export default function ShareScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        <ShareCard ref={cardRef} session={session} phases={phases} unit={unit} width={cardWidth} showRoute={showRoute} />
+        <ShareCard
+          ref={cardRef}
+          session={session}
+          phases={phases}
+          unit={unit}
+          width={cardWidth}
+          showRoute={showRoute}
+          hrSeries={hrSeries}
+          showHr={showHr}
+        />
+
+        {hrSeries ? (
+          <View style={[styles.toggle, { width: cardWidth }]}>
+            <Ionicons name="pulse-outline" size={18} color={colors.textSecondary} />
+            <AppText variant="callout" style={{ flex: 1, marginLeft: 10 }}>
+              Include heart-rate graph
+            </AppText>
+            <Switch
+              value={showHr}
+              onValueChange={toggleHr}
+              trackColor={{ true: def.accent, false: 'rgba(255,255,255,0.15)' }}
+              thumbColor={colors.text}
+              accessibilityLabel="Include heart-rate graph"
+            />
+          </View>
+        ) : null}
 
         {session.gps?.hasRoute ? (
           <View style={[styles.toggle, { width: cardWidth }]}>
@@ -112,8 +150,8 @@ export default function ShareScreen() {
               Include route shape
             </AppText>
             <Switch
-              value={showRoute}
-              onValueChange={setShowRoute}
+              value={routeShown}
+              onValueChange={toggleRoute}
               trackColor={{ true: def.accent, false: 'rgba(255,255,255,0.15)' }}
               thumbColor={colors.text}
               accessibilityLabel="Include route shape"

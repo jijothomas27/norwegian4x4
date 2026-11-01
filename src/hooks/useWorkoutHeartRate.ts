@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
 
 import { addHrSample, EMPTY_HR_STATS, summarizeHr, type HrStats, type HrSummary } from '../domain/hrStats';
+import type { RawHrSample } from '../domain/hrSeries';
 import type { TimelinePosition } from '../domain/timeline';
 import { bpmRange, classify, zoneCoachingLine, type ZoneStatus } from '../domain/zones';
 import { DEMO_DEVICE, HR_STALE_MS, useHeartRate } from '../hr/HeartRateProvider';
@@ -28,6 +29,8 @@ export function useWorkoutHeartRate(
   cueOpts: CueOptions,
   /** Exact position for a given time — readings keep arriving while the app is in the background. */
   positionAt?: (at: number) => TimelinePosition | null,
+  /** Workout-timeline ms for a wall-clock time — stamps the samples kept for the graph. */
+  toTimeline?: (at: number) => number | null,
 ) {
   const hr = useHeartRate();
   const { state } = useStore();
@@ -54,12 +57,16 @@ export function useWorkoutHeartRate(
   const outSince = useRef<number | null>(null);
   const lastCoachAt = useRef(0);
   const coachedPhase = useRef<string | null>(null);
+  /** Every reading on the workout timeline, for the heart-rate graph (bucketed when saved). */
+  const samples = useRef<RawHrSample[]>([]);
 
   const onReading = useEffectEvent(() => {
     if (timerStatus !== 'running' || hr.bpm === null || hr.at === null) return;
     const at = hr.at;
     const pos = positionAt ? positionAt(at) : position;
     if (!pos || pos.done) return; // paused at that moment, or after the end
+    const tMs = toTimeline ? toTimeline(at) : null;
+    if (tMs !== null) samples.current.push({ tMs, bpm: hr.bpm });
     const phase = pos.phase;
     const range = maxHr ? bpmRange(phase.target, maxHr.bpm) : null;
     const live = classify(hr.bpm, range ?? { low: 0, high: 999 }, pos.phaseElapsedMs / 1000, phase.target.settleSec);
@@ -115,6 +122,7 @@ export function useWorkoutHeartRate(
   }, [phase.key]);
 
   const getSummary = useCallback((): HrSummary | null => summarizeHr(stats.current), []);
+  const getSamples = useCallback((): readonly RawHrSample[] => samples.current, []);
 
   return {
     bpm,
@@ -126,5 +134,6 @@ export function useWorkoutHeartRate(
     /** Demo readings must never train the learned max HR. */
     isDemo: hr.device?.id === DEMO_DEVICE.id,
     getSummary,
+    getSamples,
   };
 }

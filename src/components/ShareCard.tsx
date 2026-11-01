@@ -4,6 +4,7 @@ import { useState, type ComponentRef, type Ref } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 
+import type { HrSeries } from '../domain/hrSeries';
 import { getProtocol } from '../domain/protocols';
 import { pickShareStats, type ShareStat } from '../domain/shareStats';
 import { formatMinutes } from '../domain/timeline';
@@ -13,6 +14,7 @@ import { formatLongDate, formatNumber } from '../lib/format';
 import type { SessionEntry } from '../state/model';
 import { colors } from '../theme/tokens';
 import { AppText } from './AppText';
+import { HrChart } from './HrChart';
 import { RouteSketch } from './RouteSketch';
 
 interface Props {
@@ -21,11 +23,14 @@ interface Props {
   unit: DistanceUnit;
   width: number;
   showRoute: boolean;
+  /** Heart-rate graph in place of the route, when the session has one. */
+  hrSeries?: HrSeries | null;
+  showHr?: boolean;
   ref?: Ref<ComponentRef<typeof View>>;
 }
 
-/** Height ÷ width: 2:3 (a phone-friendly portrait) with the route, square without. */
-export const shareCardAspect = (withRoute: boolean) => (withRoute ? 1.5 : 1);
+/** Height ÷ width: 2:3 (a phone-friendly portrait) with a route or graph, square without. */
+export const shareCardAspect = (withMedia: boolean) => (withMedia ? 1.5 : 1);
 
 /** Display parts for one stat tile. */
 export function formatShareStat(stat: ShareStat, unit: DistanceUnit, walking: boolean): { value: string; unit?: string; label: string } {
@@ -57,14 +62,15 @@ export function formatShareStat(stat: ShareStat, unit: DistanceUnit, walking: bo
  * well as a small image in a chat or a story: one headline, four numbers,
  * the route, and the protocol's colours.
  */
-export function ShareCard({ session, phases, unit, width, showRoute, ref }: Props) {
+export function ShareCard({ session, phases, unit, width, showRoute, hrSeries, showHr = false, ref }: Props) {
   const def = getProtocol(session.protocolId);
   const walking = def.id === 'japanese-iwt';
   const stats = pickShareStats(session);
   const newMax = session.maxHr?.previous !== undefined;
   const s = width / 360; // scale everything off a 360-wide design
-  const routeShown = showRoute && session.gps?.hasRoute === true;
-  const height = Math.round(width * shareCardAspect(routeShown));
+  const hrShown = showHr && !!hrSeries;
+  const routeShown = !hrShown && showRoute && session.gps?.hasRoute === true;
+  const height = Math.round(width * shareCardAspect(routeShown || hrShown));
   // The route fills whatever height is left between the header and the stats.
   const [routeHeight, setRouteHeight] = useState(0);
 
@@ -113,12 +119,16 @@ export function ShareCard({ session, phases, unit, width, showRoute, ref }: Prop
         </View>
       ) : null}
 
-      {/* Route */}
+      {/* Route or heart-rate graph */}
       <View
         style={{ flex: 1, justifyContent: 'center', marginVertical: 10 * s, overflow: 'hidden' }}
         onLayout={(e) => setRouteHeight(Math.floor(e.nativeEvent.layout.height))}
       >
-        {routeShown && routeHeight > 40 ? <RouteSketch sessionId={session.id} phases={phases} height={routeHeight} /> : null}
+        {hrShown && hrSeries && routeHeight > 40 ? (
+          <HrChart series={hrSeries} height={Math.min(routeHeight, Math.round(width * 0.62))} compact />
+        ) : routeShown && routeHeight > 40 ? (
+          <RouteSketch sessionId={session.id} phases={phases} height={routeHeight} />
+        ) : null}
       </View>
 
       {/* Stats */}
