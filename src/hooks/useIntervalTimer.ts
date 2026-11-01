@@ -98,6 +98,14 @@ export function useIntervalTimer(phases: readonly Phase[], handlers: TimerHandle
     [clock, phases],
   );
 
+  /**
+   * Timeline position at an arbitrary wall-clock time. JS timers stop while the
+   * app is in the background, so the rendered `position` can be stale when a
+   * heart-rate reading arrives — this is always exact.
+   */
+  const positionAt = useCallback((at: number) => locate(phases, clockElapsedMs(clock, at)), [clock, phases]);
+  const elapsedAt = useCallback((at: number) => clockElapsedMs(clock, at), [clock]);
+
   return {
     status: clock.status,
     position,
@@ -112,5 +120,9 @@ export function useIntervalTimer(phases: readonly Phase[], handlers: TimerHandle
     skip,
     snapshot,
     setSpeed,
+    positionAt,
+    elapsedAt,
+    /** Changes only on start / pause / resume / skip / speed — when the cue schedule must be rebuilt. */
+    anchor: `${clock.status}:${clock.baseMs}:${clock.runStartedAt ?? '-'}:${clock.speed}`,
   };
 }

@@ -29,24 +29,28 @@ export const NORWEGIAN_4X4: ProtocolDef = {
     title: 'Warm-up',
     guidance: 'Easy pace · build gradually to a light sweat',
     tone: 'warmup',
+    target: { low: 0.5, high: 0.7, settleSec: 120 },
   },
   work: {
     label: 'High intensity',
     title: 'High intensity',
     guidance: '85–95% of max heart rate · only a few words possible',
     tone: 'intense',
+    target: { low: 0.85, high: 0.95, settleSec: 90 },
   },
   rest: {
     label: 'Active recovery',
     title: 'Active recovery',
     guidance: '60–70% of max heart rate · keep moving, breathe deep',
     tone: 'recover',
+    target: { low: 0.6, high: 0.7, settleSec: 75 },
   },
   cooldown: {
     label: 'Cool-down',
     title: 'Cool-down',
     guidance: 'Gentle pace · let your heart rate settle',
     tone: 'cooldown',
+    target: { low: 0.5, high: 0.65, settleSec: 90 },
   },
 };
 
@@ -76,24 +80,28 @@ export const JAPANESE_IWT: ProtocolDef = {
     title: 'Warm-up',
     guidance: 'Comfortable walk · loosen up, stand tall',
     tone: 'warmup',
+    target: { low: 0.5, high: 0.65, settleSec: 90 },
   },
   work: {
     label: 'Fast walk',
     title: 'Fast walk',
     guidance: '~70% effort · long strides, swing your arms',
     tone: 'brisk',
+    target: { low: 0.75, high: 0.85, settleSec: 60 },
   },
   rest: {
     label: 'Slow walk',
     title: 'Slow walk',
     guidance: '~40% effort · relaxed and leisurely',
     tone: 'easy',
+    target: { low: 0.55, high: 0.68, settleSec: 60 },
   },
   cooldown: {
     label: 'Cool-down',
     title: 'Cool-down',
     guidance: 'Easy stroll · let your breathing return to normal',
     tone: 'cooldown',
+    target: { low: 0.5, high: 0.65, settleSec: 60 },
   },
 };
 
@@ -146,6 +154,7 @@ export function buildPhases(def: ProtocolDef, rawConfig: Partial<WorkoutConfig> 
     durationSec: warmupSec,
     totalRounds,
     announcement: `Warm up. ${spokenMinutes(warmupSec)}. Ease into it.`,
+    target: def.warmup.target,
   });
 
   for (let round = 1; round <= totalRounds; round++) {
@@ -160,6 +169,7 @@ export function buildPhases(def: ProtocolDef, rawConfig: Partial<WorkoutConfig> 
       round,
       totalRounds,
       announcement: `Round ${round} of ${totalRounds}. ${def.work.title}. ${spokenMinutes(def.workSec)}.`,
+      target: def.work.target,
     });
     phases.push({
       key: `rest-${round}`,
@@ -172,6 +182,7 @@ export function buildPhases(def: ProtocolDef, rawConfig: Partial<WorkoutConfig> 
       round,
       totalRounds,
       announcement: `${def.rest.title}. ${spokenMinutes(def.restSec)}. Breathe.`,
+      target: def.rest.target,
     });
   }
 
@@ -185,6 +196,7 @@ export function buildPhases(def: ProtocolDef, rawConfig: Partial<WorkoutConfig> 
     durationSec: def.cooldownSec,
     totalRounds,
     announcement: `Cool down. ${spokenMinutes(def.cooldownSec)}. Well done.`,
+    target: def.cooldown.target,
   });
 
   return phases;

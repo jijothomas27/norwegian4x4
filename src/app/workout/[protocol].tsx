@@ -7,15 +7,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../../components/AppText';
 import { IconButton } from '../../components/Buttons';
 import { FadeIn } from '../../components/FadeIn';
+import { LiveHeartRate } from '../../components/LiveHeartRate';
 import { PhaseBackdrop } from '../../components/PhaseBackdrop';
 import { PhaseStrip } from '../../components/PhaseStrip';
 import { ProgressRing } from '../../components/ProgressRing';
 import { ActionSheet, type SheetAction } from '../../components/Sheet';
 import { buildPhases, getProtocol, isProtocolId, normalizeConfig } from '../../domain/protocols';
 import { formatClock } from '../../domain/timeline';
+import type { HrSummary } from '../../domain/hrStats';
+import { learnMaxHr } from '../../domain/vo2';
 import type { ProtocolDef, WorkoutConfig } from '../../domain/types';
+import { useBackgroundSession } from '../../hooks/useBackgroundSession';
 import { useIntervalTimer, type TimerResult } from '../../hooks/useIntervalTimer';
+import { useWorkoutHeartRate } from '../../hooks/useWorkoutHeartRate';
 import { cues, type CueOptions } from '../../lib/cues';
+import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
 import { colors, tones } from '../../theme/tokens';
 
@@ -23,6 +29,8 @@ const LEAD_IN_SECONDS = 3;
 const MIN_SAVE_MS = 60_000;
 const DEV_SPEED = 30;
 const WAKE_TAG = 'tempo-workout';
+
+const summarizeNone = () => ({ summary: null as HrSummary | null, isDemo: false });
 
 /** Keep the display on for the whole session (errors ignored — e.g. unsupported browsers). */
 function useScreenAwake() {
@@ -52,15 +60,31 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   );
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const { state, addSession } = useStore();
+  const { width, height } = useWindowDimensions();
+  const { state, addSession, updateSettings } = useStore();
 
   const phases = useMemo(() => buildPhases(def, config), [def, config]);
 
   const cueOpts: CueOptions = { voice: state.settings.voiceCues, haptics: state.settings.haptics };
 
+  // The heart-rate hook needs the timer's position, so it's created after the
+  // timer; finish() reaches its summary through this ref.
+  const hrSummaryRef = useRef<() => { summary: HrSummary | null; isDemo: boolean }>(summarizeNone);
+
   const finish = useCallback(
     (result: TimerResult, completed: boolean) => {
+      const { summary: hrSummary, isDemo } = hrSummaryRef.current();
+      // A sustained peak above what we knew raises the learned max HR,
+      // which sharpens both the zones and the VO₂ max estimate.
+      let settings = state.settings;
+      if (hrSummary && !isDemo) {
+        const learned = learnMaxHr(settings.learnedMaxHr, hrSummary.sustainedMax || undefined);
+        if (learned !== settings.learnedMaxHr) {
+          settings = { ...settings, learnedMaxHr: learned, learnedMaxHrAt: result.endedAt };
+          updateSettings({ learnedMaxHr: learned, learnedMaxHrAt: result.endedAt });
+        }
+      }
+      const vo2 = hrSummary ? vo2EstimateFor(settings) : null;
       const entry = addSession({
         protocolId: def.id,
         startedAt: result.startedAt,
@@ -69,10 +93,12 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         roundsCompleted: result.roundsCompleted,
         totalRounds: config.rounds,
         completed,
+        hr: hrSummary ?? undefined,
+        vo2Estimate: vo2?.value,
       });
       router.replace({ pathname: '/summary', params: { id: entry.id } });
     },
-    [addSession, config.rounds, def.id, router],
+    [addSession, config.rounds, def.id, router, state.settings, updateSettings],
   );
 
   const timer = useIntervalTimer(phases, {
@@ -94,6 +120,15 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
     },
   });
 
+  // Android: keep cues (and the heart-rate stream) going when another app is in front.
+  useBackgroundSession(phases, timer, cueOpts);
+
+  const heart = useWorkoutHeartRate(timer.position, timer.status, cueOpts, timer.positionAt);
+  const { getSummary, isDemo } = heart;
+  useEffect(() => {
+    hrSummaryRef.current = () => ({ summary: getSummary(), isDemo });
+  }, [getSummary, isDemo]);
+
   // ── Lead-in "3 · 2 · 1" before the clock starts ───────────────────────────
   const [leadIn, setLeadIn] = useState(LEAD_IN_SECONDS);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -109,7 +144,17 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
     return () => clearTimeout(id);
   }, [leadIn, sheetOpen]);
 
-  useEffect(() => () => cues.silence(), []);
+  // Stop talking if the screen closes mid-sentence — except "Workout complete".
+  const statusRef = useRef(timer.status);
+  useEffect(() => {
+    statusRef.current = timer.status;
+  }, [timer.status]);
+  useEffect(
+    () => () => {
+      if (statusRef.current !== 'complete') cues.silence();
+    },
+    [],
+  );
 
   // ── End / cancel flow ──────────────────────────────────────────────────────
   const resumeOnClose = useRef(false);
@@ -166,7 +211,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   const accent = tones[tone].accent;
   const next = phases[position.index + 1];
   const paused = status === 'paused';
-  const ringSize = Math.min(width - 72, 320);
+  const ringSize = Math.max(200, Math.min(width - 72, height * 0.34, 320));
   const remainingTotal = timer.totalMs - timer.elapsedMs;
 
   const roundLabel =
@@ -276,6 +321,20 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
               </FadeIn>
             </View>
           )}
+        </View>
+
+        {/* Live heart rate */}
+        <View style={styles.hr}>
+          <LiveHeartRate
+            phase={phase}
+            accent={accent}
+            bpm={heart.bpm}
+            range={heart.range}
+            maxHr={heart.maxHr}
+            status={heart.status}
+            deviceName={heart.deviceName}
+            connection={heart.connection}
+          />
         </View>
 
         {/* Round dots */}
@@ -393,7 +452,7 @@ const styles = StyleSheet.create({
   },
   labelBlock: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 22,
   },
   stageLabel: {
     marginTop: 10,
@@ -407,7 +466,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   guidance: {
-    marginTop: 28,
+    marginTop: 20,
     paddingHorizontal: 16,
     color: colors.textSecondary,
   },
@@ -419,7 +478,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 22,
+  },
+  hr: {
+    marginTop: 12,
+    marginBottom: 18,
+    alignItems: 'center',
   },
   dot: {
     width: 7,

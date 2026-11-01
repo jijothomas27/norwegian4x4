@@ -1,0 +1,63 @@
+<!doctype html><html><body style="margin:0;background:#000">
+<script>
+const C = { bg0:'#2B2444', bg1:'#17151F', bg2:'#121214', crimson:'#FF5A6E', amber:'#FFB347', teal:'#2FD4C4', lav:'#C8BFF4', white:'#F4F2FA' };
+
+function background(ctx, s) {
+  const g = ctx.createRadialGradient(s*0.5, s*0.42, 0, s*0.5, s*0.5, s*0.75);
+  g.addColorStop(0, C.bg0); g.addColorStop(0.55, C.bg1); g.addColorStop(1, C.bg2);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
+}
+
+// The mark: four arcs (4 intervals) flowing hot → calm, around a single pulse point.
+function mark(ctx, s, { scale = 1, mono = false, ripple = true } = {}) {
+  const cx = s/2, cy = s/2, u = s/1024 * scale;
+  const R = 300*u, W = 62*u, gap = 15 * Math.PI/180;
+  ctx.save();
+  if (ripple && !mono) {
+    ctx.strokeStyle = 'rgba(200,191,244,0.10)'; ctx.lineWidth = 4*u;
+    ctx.beginPath(); ctx.arc(cx, cy, 392*u, 0, Math.PI*2); ctx.stroke();
+  }
+  // soft glow behind centre
+  if (!mono) {
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 200*u);
+    glow.addColorStop(0, 'rgba(255,90,110,0.22)'); glow.addColorStop(1, 'rgba(255,90,110,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, 200*u, 0, Math.PI*2); ctx.fill();
+  }
+  const start = -Math.PI/2;
+  let stroke;
+  if (mono) stroke = '#FFFFFF';
+  else {
+    stroke = ctx.createConicGradient(start, cx, cy);
+    stroke.addColorStop(0.00, C.crimson);
+    stroke.addColorStop(0.30, C.amber);
+    stroke.addColorStop(0.62, C.teal);
+    stroke.addColorStop(0.92, C.lav);
+    stroke.addColorStop(1.00, C.lav);
+  }
+  ctx.strokeStyle = stroke; ctx.lineWidth = W; ctx.lineCap = 'round';
+  // round caps eat into the gap: compensate by the cap's angular size
+  const capAng = (W/2) / R;
+  for (let i = 0; i < 4; i++) {
+    const a0 = start + i*Math.PI/2 + gap/2 + capAng;
+    const a1 = start + (i+1)*Math.PI/2 - gap/2 - capAng;
+    ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke();
+  }
+  // pulse point
+  ctx.fillStyle = mono ? '#FFFFFF' : C.white;
+  ctx.beginPath(); ctx.arc(cx, cy, 46*u, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function render(kind, s) {
+  const c = document.createElement('canvas'); c.width = c.height = s;
+  const ctx = c.getContext('2d');
+  if (kind === 'icon') { background(ctx, s); mark(ctx, s); }
+  if (kind === 'fg') { mark(ctx, s, { scale: 0.66, ripple: false }); }
+  if (kind === 'bg') { background(ctx, s); }
+  if (kind === 'mono') { mark(ctx, s, { scale: 0.66, mono: true, ripple: false }); }
+  if (kind === 'splash') { mark(ctx, s, { ripple: false }); }
+  if (kind === 'favicon') { background(ctx, s); mark(ctx, s, { scale: 1.15, ripple: false }); }
+  return c.toDataURL('image/png');
+}
+window.render = render;
+</script></body></html>

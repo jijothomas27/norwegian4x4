@@ -38,6 +38,7 @@ export function JournalRow({ entry, weightUnit, linkedSessionName, onLongPress }
             {'  ·  '}
             {rounds}
             {entry.completed ? '' : '  ·  ended early'}
+            {entry.hr ? `  ·  avg ${entry.hr.avg} bpm` : ''}
           </AppText>
         </View>
         <AppText variant="caption" style={styles.time}>

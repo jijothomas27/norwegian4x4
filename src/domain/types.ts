@@ -22,6 +22,19 @@ export interface Phase {
   totalRounds: number;
   /** Sentence spoken when the phase begins (if voice cues are on). */
   announcement: string;
+  /** Target heart-rate band as fractions of max HR. */
+  target: HrTarget;
+}
+
+/** Target heart-rate band, as fractions of max heart rate (0.85 = 85 %). */
+export interface HrTarget {
+  low: number;
+  high: number;
+  /**
+   * Seconds at the start of the stage during which being outside the band is
+   * expected (heart rate lags effort by 1–2 minutes), so no correction is given.
+   */
+  settleSec: number;
 }
 
 export interface WorkoutConfig {
@@ -34,6 +47,7 @@ export interface PhaseSpec {
   title: string;
   guidance: string;
   tone: Tone;
+  target: HrTarget;
 }
 
 export interface ProtocolDef {

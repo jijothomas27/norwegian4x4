@@ -15,6 +15,17 @@ export interface SessionEntry {
   totalRounds: number;
   /** false when the workout was ended early and saved as partial. */
   completed: boolean;
+  /** Present when a heart-rate sensor was connected during the session. */
+  hr?: {
+    avg: number;
+    max: number;
+    /** % of hard-interval time inside the target band. */
+    inZonePct: number | null;
+    /** Highest heart rate held for 10 s. */
+    sustainedMax?: number;
+  };
+  /** Heart-rate-ratio VO₂ max estimate computed when the session ended. */
+  vo2Estimate?: number;
 }
 
 export interface MetricEntry {
@@ -32,10 +43,31 @@ export interface MetricEntry {
 
 export type JournalEntry = SessionEntry | MetricEntry;
 
+export interface HrDevice {
+  id: string;
+  name: string;
+}
+
 export interface Settings {
   weightUnit: WeightUnit;
   voiceCues: boolean;
   haptics: boolean;
+  /** Spoken "push harder / ease off" prompts when out of the target zone. */
+  voiceCoaching: boolean;
+  /** Used to estimate max heart rate when no measured value is set. */
+  age?: number;
+  /** Measured max heart rate, overrides the age estimate. */
+  maxHr?: number;
+  /** Last heart-rate sensor used — reconnected automatically. */
+  hrDevice?: HrDevice;
+  /** Resting heart rate (entered, or measured with the resting check). */
+  restingHr?: number;
+  restingHrAt?: number;
+  /** Highest sustained heart rate seen in workouts. */
+  learnedMaxHr?: number;
+  learnedMaxHrAt?: number;
+  /** Personal VO₂ factor calibrated from a logged reference reading. */
+  vo2Factor?: number;
 }
 
 export interface PersistedState {
@@ -49,6 +81,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weightUnit: 'kg',
   voiceCues: true,
   haptics: true,
+  voiceCoaching: true,
 };
 
 export const EMPTY_STATE: PersistedState = {
@@ -95,10 +128,20 @@ export function parsePersisted(raw: string | null): PersistedState {
     : [];
 
   const s = isObj(data.settings) ? data.settings : {};
+  const device = isObj(s.hrDevice) && typeof s.hrDevice.id === 'string' ? s.hrDevice : undefined;
   const settings: Settings = {
     weightUnit: s.weightUnit === 'lbs' ? 'lbs' : 'kg',
     voiceCues: typeof s.voiceCues === 'boolean' ? s.voiceCues : DEFAULT_SETTINGS.voiceCues,
     haptics: typeof s.haptics === 'boolean' ? s.haptics : DEFAULT_SETTINGS.haptics,
+    voiceCoaching: typeof s.voiceCoaching === 'boolean' ? s.voiceCoaching : DEFAULT_SETTINGS.voiceCoaching,
+    age: num(s.age),
+    maxHr: num(s.maxHr),
+    hrDevice: device ? { id: device.id as string, name: typeof device.name === 'string' ? device.name : 'Heart-rate sensor' } : undefined,
+    restingHr: num(s.restingHr),
+    restingHrAt: num(s.restingHrAt),
+    learnedMaxHr: num(s.learnedMaxHr),
+    learnedMaxHrAt: num(s.learnedMaxHrAt),
+    vo2Factor: num(s.vo2Factor),
   };
 
   return { version: 1, sessions, metrics, settings };

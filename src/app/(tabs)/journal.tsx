@@ -10,10 +10,12 @@ import { FadeIn } from '../../components/FadeIn';
 import { JournalRow } from '../../components/JournalRow';
 import { ActionSheet } from '../../components/Sheet';
 import { TrendCard } from '../../components/TrendCard';
+import { Vo2EstimateCard } from '../../components/Vo2EstimateCard';
 import { getProtocol } from '../../domain/protocols';
 import { kgToUnit } from '../../lib/format';
 import type { JournalEntry } from '../../state/model';
 import { journalSections, metricSeries } from '../../state/selectors';
+import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
 import { colors, space } from '../../theme/tokens';
 
@@ -29,6 +31,16 @@ export default function JournalScreen() {
   const weight = useMemo(() => metricSeries(state.metrics, 'weightKg'), [state.metrics]);
   const sessionNames = useMemo(
     () => new Map(state.sessions.map((s) => [s.id, getProtocol(s.protocolId).name])),
+    [state.sessions],
+  );
+
+  const estimate = vo2EstimateFor(state.settings);
+  const estimateHistory = useMemo(
+    () =>
+      state.sessions
+        .filter((s) => s.vo2Estimate !== undefined)
+        .map((s) => ({ at: s.startedAt, value: s.vo2Estimate as number }))
+        .sort((a, b) => a.at - b.at),
     [state.sessions],
   );
 
@@ -50,7 +62,7 @@ export default function JournalScreen() {
 
       <FadeIn delay={100} style={styles.trends}>
         <TrendCard
-          label="VO₂ max"
+          label="VO₂ max · logged"
           unit="mL/kg/min"
           points={vo2}
           color={colors.cyan}
@@ -65,6 +77,10 @@ export default function JournalScreen() {
           display={(kg) => kgToUnit(kg, unit)}
           emptyHint="Optional — track alongside VO₂"
         />
+      </FadeIn>
+
+      <FadeIn delay={140} style={{ marginTop: 12 }}>
+        <Vo2EstimateCard estimate={estimate} history={estimateHistory} />
       </FadeIn>
 
       <FadeIn delay={180}>

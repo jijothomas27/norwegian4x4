@@ -19,7 +19,9 @@ import { getProtocol } from '../domain/protocols';
 import { formatDayHeading, formatNumber, formatTime, kgToUnit, unitToKg } from '../lib/format';
 import type { WeightUnit } from '../state/model';
 import { metricSeries } from '../state/selectors';
+import { maxHrFor } from '../state/fitness';
 import { useStore } from '../state/store';
+import { calibrateFactor } from '../domain/vo2';
 import { colors, radius, space } from '../theme/tokens';
 import { useNow } from '../hooks/useNow';
 
@@ -46,7 +48,11 @@ export default function LogScreen() {
 
   const [vo2, setVo2] = useState('');
   const [weight, setWeight] = useState('');
-  const [hr, setHr] = useState('');
+  // Pre-fill the peak heart rate recorded by a connected sensor.
+  const [hr, setHr] = useState(() => {
+    const peak = sessionId ? state.sessions.find((s) => s.id === sessionId)?.hr?.max : undefined;
+    return peak ? String(peak) : '';
+  });
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +92,13 @@ export default function LogScreen() {
       if (value === undefined) continue;
       if (Number.isNaN(value)) return setError(`${range.label} doesn’t look like a number.`);
       if (value < range.min || value > range.max) return setError(`${range.label} looks unusual — please double-check it.`);
+    }
+
+    // A trusted reading (Garmin, lab) calibrates Tempo's heart-rate estimate to you.
+    if (vo2max !== undefined && state.settings.restingHr) {
+      const max = maxHrFor(state.settings);
+      const k = max ? calibrateFactor(vo2max, max.bpm, state.settings.restingHr) : null;
+      if (k !== null) updateSettings({ vo2Factor: k });
     }
 
     addMetric({
@@ -133,7 +146,10 @@ export default function LogScreen() {
           <MetricField
             label="VO₂ max"
             unit="mL/kg/min"
-            hint={lastVo2 ? `Last: ${formatNumber(lastVo2.value)}` : 'From your watch or a lab test'}
+            hint={
+              (lastVo2 ? `Last: ${formatNumber(lastVo2.value)} · ` : '') +
+              'From your Garmin or a lab test — also calibrates Tempo’s estimate'
+            }
             value={vo2}
             onChangeText={(t) => {
               setVo2(t);
@@ -178,7 +194,7 @@ export default function LogScreen() {
             ref={hrRef}
             label="Heart rate"
             unit="bpm"
-            hint="Peak reached during your hardest interval"
+            hint={session?.hr ? 'Peak recorded by your sensor — edit if needed' : 'Peak reached during your hardest interval'}
             value={hr}
             onChangeText={(t) => {
               setHr(t);

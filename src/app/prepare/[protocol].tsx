@@ -1,19 +1,25 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { requestWorkoutNotificationPermission } from '../../../modules/tempo-workout';
 import { AppText } from '../../components/AppText';
 import { IconButton, PrimaryButton } from '../../components/Buttons';
 import { Segmented, Stepper, ToggleRow } from '../../components/Controls';
 import { FadeIn } from '../../components/FadeIn';
 import { PhaseStrip } from '../../components/PhaseStrip';
+import { PressableScale } from '../../components/PressableScale';
 import { buildPhases, getProtocol, isProtocolId } from '../../domain/protocols';
 import { formatClock, formatMinutes, totalDurationMs } from '../../domain/timeline';
-import type { ProtocolDef, WorkoutConfig } from '../../domain/types';
+import type { HrTarget, ProtocolDef, WorkoutConfig } from '../../domain/types';
+import { bpmRange } from '../../domain/zones';
+import { useHeartRate } from '../../hr/HeartRateProvider';
 import { useStore } from '../../state/store';
 import { colors, radius, space, tones } from '../../theme/tokens';
+import { maxHrFor } from '../../state/fitness';
 
 export default function PrepareRoute() {
   const { protocol } = useLocalSearchParams<{ protocol: string }>();
@@ -29,18 +35,35 @@ function PrepareScreen({ def }: { def: ProtocolDef }) {
 
   const phases = useMemo(() => buildPhases(def, config), [def, config]);
   const totalSec = totalDurationMs(phases) / 1000;
+  const hr = useHeartRate();
+  const maxHr = maxHrFor(state.settings);
+  const zone = (t: HrTarget) => {
+    if (!maxHr) return null;
+    const r = bpmRange(t, maxHr.bpm);
+    return `${r.low}–${r.high} bpm`;
+  };
+  const hrLine = (() => {
+    const sensor = hr.device
+      ? `${hr.device.name} · ${hr.status === 'connected' ? 'connected' : 'not connected'}`
+      : 'Connect your watch for live zones';
+    const src = maxHr?.source === 'age' ? ' (from age)' : maxHr?.source === 'workouts' ? ' (from your workouts)' : '';
+    const max = maxHr ? `Max ${maxHr.bpm} bpm${src}` : 'Add your age to see targets';
+    return { sensor, max };
+  })();
 
-  const begin = () =>
+  const begin = async () => {
+    await requestWorkoutNotificationPermission();
     router.push({
       pathname: '/workout/[protocol]',
       params: { protocol: def.id, warmup: String(config.warmupMin), rounds: String(config.rounds) },
     });
+  };
 
   const structure = [
-    { tone: def.warmup.tone, title: def.warmup.title, detail: def.warmup.guidance, time: formatClock(config.warmupMin * 60_000) },
-    { tone: def.work.tone, title: def.work.title, detail: def.work.guidance, time: `${config.rounds} × ${formatClock(def.workSec * 1000)}` },
-    { tone: def.rest.tone, title: def.rest.title, detail: def.rest.guidance, time: `${config.rounds} × ${formatClock(def.restSec * 1000)}` },
-    { tone: def.cooldown.tone, title: def.cooldown.title, detail: def.cooldown.guidance, time: formatClock(def.cooldownSec * 1000) },
+    { tone: def.warmup.tone, title: def.warmup.title, detail: def.warmup.guidance, time: formatClock(config.warmupMin * 60_000), zone: zone(def.warmup.target) },
+    { tone: def.work.tone, title: def.work.title, detail: def.work.guidance, time: `${config.rounds} × ${formatClock(def.workSec * 1000)}`, zone: zone(def.work.target) },
+    { tone: def.rest.tone, title: def.rest.title, detail: def.rest.guidance, time: `${config.rounds} × ${formatClock(def.restSec * 1000)}`, zone: zone(def.rest.target) },
+    { tone: def.cooldown.tone, title: def.cooldown.title, detail: def.cooldown.guidance, time: formatClock(def.cooldownSec * 1000), zone: zone(def.cooldown.target) },
   ];
 
   return (
@@ -98,9 +121,16 @@ function PrepareScreen({ def }: { def: ProtocolDef }) {
                       {s.detail}
                     </AppText>
                   </View>
-                  <AppText variant="callout" color={colors.textSecondary} style={styles.stageTime}>
-                    {s.time}
-                  </AppText>
+                  <View style={styles.stageRight}>
+                    <AppText variant="callout" color={colors.textSecondary} style={styles.stageTime}>
+                      {s.time}
+                    </AppText>
+                    {s.zone ? (
+                      <AppText variant="caption" color={tones[s.tone].accent} style={styles.stageZone}>
+                        {s.zone}
+                      </AppText>
+                    ) : null}
+                  </View>
                 </View>
               ))}
             </View>
@@ -148,6 +178,32 @@ function PrepareScreen({ def }: { def: ProtocolDef }) {
               </View>
             </FadeIn>
           )}
+
+          {/* Heart rate */}
+          <FadeIn delay={270}>
+            <AppText variant="eyebrow" style={styles.section}>
+              Heart rate
+            </AppText>
+            <PressableScale
+              onPress={() => router.push('/heart-rate')}
+              accessibilityRole="button"
+              accessibilityLabel={`Heart rate settings. ${hrLine.sensor}. ${hrLine.max}`}
+              style={[styles.card, styles.hrCard]}
+            >
+              <View style={[styles.hrIcon, hr.status === 'connected' && { backgroundColor: 'rgba(255,90,110,0.14)' }]}>
+                <Ionicons
+                  name={hr.status === 'connected' ? 'heart' : 'heart-outline'}
+                  size={18}
+                  color={hr.status === 'connected' ? colors.crimson : colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <AppText variant="callout">{hrLine.sensor}</AppText>
+                <AppText variant="caption">{hrLine.max}</AppText>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textTertiary} />
+            </PressableScale>
+          </FadeIn>
 
           {/* Cues */}
           <FadeIn delay={300}>
@@ -266,9 +322,31 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 14,
   },
-  stageTime: {
+  stageRight: {
     marginLeft: 12,
+    alignItems: 'flex-end',
+  },
+  stageTime: {
     fontVariant: ['tabular-nums'],
+  },
+  stageZone: {
+    marginTop: 2,
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  hrCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  hrIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14,
   },
   adjustRow: {
     flexDirection: 'row',

@@ -2,6 +2,7 @@ import * as Haptics from 'expo-haptics';
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 
+import { backgroundSession } from '../../modules/tempo-workout';
 import type { Phase } from '../domain/types';
 
 /**
@@ -10,7 +11,19 @@ import type { Phase } from '../domain/types';
  * Voice uses the device's built-in text-to-speech (expo-speech), so no audio
  * assets are needed. To use your own chimes instead, replace `say()` with an
  * expo-audio player — every call site goes through the functions below.
+ *
+ * On Android builds, scheduled cues (stage changes, 3-2-1, halfway, complete)
+ * are played by the background workout service instead, so they keep coming
+ * when another app is open. While that is active the in-app versions stay
+ * quiet to avoid hearing everything twice.
  */
+
+let scheduledInBackground = false;
+
+/** Called by the workout screen while the background session owns scheduled cues. */
+export function setScheduledCuesInBackground(on: boolean) {
+  scheduledInBackground = on && backgroundSession !== null;
+}
 
 export interface CueOptions {
   voice: boolean;
@@ -59,20 +72,33 @@ function buzz(kind: 'start-hard' | 'start-easy' | 'tick' | 'success' | 'soft') {
 export const cues = {
   /** A new stage has begun. */
   phaseStart(phase: Phase, opts: CueOptions) {
+    if (scheduledInBackground) return;
     if (opts.haptics) buzz(phase.kind === 'work' ? 'start-hard' : 'start-easy');
     if (opts.voice) say(phase.announcement);
   },
   /** Final 3-2-1 of a stage. */
   countdown(secondsLeft: number, opts: CueOptions) {
+    if (scheduledInBackground) return;
     if (opts.haptics) buzz('tick');
     if (opts.voice && secondsLeft === 3) say('Three. Two. One.');
   },
   /** Mid-stage nudges during work intervals. */
   milestone(text: string, opts: CueOptions) {
+    if (scheduledInBackground) return;
+    if (opts.haptics) buzz('soft');
+    if (opts.voice) say(text);
+  },
+  /** Heart-rate coaching ("Ease off a little") — live, so never scheduled ahead. */
+  coach(text: string, opts: CueOptions) {
+    if (backgroundSession && opts.voice) {
+      backgroundSession.speak(text, opts.haptics ? 'soft' : null).catch(() => say(text));
+      return;
+    }
     if (opts.haptics) buzz('soft');
     if (opts.voice) say(text);
   },
   complete(opts: CueOptions) {
+    if (scheduledInBackground) return;
     if (opts.haptics) buzz('success');
     if (opts.voice) say('Workout complete. Beautifully done.');
   },
@@ -80,6 +106,7 @@ export const cues = {
     if (opts.haptics) buzz('soft');
   },
   silence() {
+    backgroundSession?.silence().catch(() => {});
     try {
       void Speech.stop();
     } catch {

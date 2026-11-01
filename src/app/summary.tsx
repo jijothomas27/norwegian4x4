@@ -10,7 +10,7 @@ import { PhaseBackdrop } from '../components/PhaseBackdrop';
 import { ProgressRing } from '../components/ProgressRing';
 import { getProtocol } from '../domain/protocols';
 import { formatMinutes } from '../domain/timeline';
-import { formatTime } from '../lib/format';
+import { formatNumber, formatTime } from '../lib/format';
 import { useStore } from '../state/store';
 import { colors, radius } from '../theme/tokens';
 
@@ -28,6 +28,8 @@ export default function SummaryScreen() {
   }
 
   const def = getProtocol(session.protocolId);
+  const prevEstimate = state.sessions.find((s) => s.id !== session.id && s.startedAt < session.startedAt && s.vo2Estimate !== undefined)
+    ?.vo2Estimate;
   const logged = state.metrics.some((m) => m.sessionId === session.id);
 
   function done() {
@@ -67,6 +69,28 @@ export default function SummaryScreen() {
             <View style={styles.statDivider} />
             <Stat label="Started" value={formatTime(session.startedAt)} />
           </FadeIn>
+
+          {session.vo2Estimate !== undefined ? (
+            <FadeIn delay={420} style={styles.hrRow}>
+              <Ionicons name="analytics-outline" size={14} color={colors.cyan} />
+              <AppText variant="caption" color={colors.textSecondary} style={{ marginLeft: 8 }}>
+                Estimated VO₂ max {formatNumber(session.vo2Estimate)}
+                {prevEstimate !== undefined && Math.abs(session.vo2Estimate - prevEstimate) >= 0.1
+                  ? ` (${session.vo2Estimate > prevEstimate ? '+' : '−'}${formatNumber(Math.abs(session.vo2Estimate - prevEstimate))})`
+                  : ''}
+              </AppText>
+            </FadeIn>
+          ) : null}
+
+          {session.hr ? (
+            <FadeIn delay={450} style={styles.hrRow}>
+              <Ionicons name="heart" size={14} color={colors.crimson} />
+              <AppText variant="caption" color={colors.textSecondary} style={{ marginLeft: 8 }}>
+                Avg {session.hr.avg} · Peak {session.hr.max} bpm
+                {session.hr.inZonePct !== null ? `  ·  ${session.hr.inZonePct}% of hard time in zone` : ''}
+              </AppText>
+            </FadeIn>
+          ) : null}
         </View>
 
         <FadeIn delay={520} style={styles.actions}>
@@ -143,6 +167,11 @@ const styles = StyleSheet.create({
   },
   actions: {
     gap: 12,
+  },
+  hrRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 14,
   },
   loggedChip: {
     height: 52,

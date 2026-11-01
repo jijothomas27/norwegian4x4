@@ -10,6 +10,7 @@ import { ProtocolCard } from '../../components/ProtocolCard';
 import { PROTOCOL_LIST } from '../../domain/protocols';
 import { formatLongDate, formatNumber, greeting } from '../../lib/format';
 import { metricSeries, weekSummary } from '../../state/selectors';
+import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
 import { colors, space } from '../../theme/tokens';
 import { useNow } from '../../hooks/useNow';
@@ -22,6 +23,7 @@ export default function HomeScreen() {
   const now = useNow();
   const week = weekSummary(state.sessions, now);
   const latestVo2 = useMemo(() => metricSeries(state.metrics, 'vo2max').at(-1), [state.metrics]);
+  const estimate = vo2EstimateFor(state.settings);
 
   const weekLine =
     week.sessions === 0
@@ -48,11 +50,12 @@ export default function HomeScreen() {
           <AppText variant="body" style={styles.subtitle}>
             {weekLine}
           </AppText>
-          {latestVo2 ? (
+          {latestVo2 || estimate ? (
             <View style={styles.vo2Chip}>
               <View style={styles.vo2Dot} />
               <AppText variant="caption" color={colors.textSecondary}>
-                VO₂ max {formatNumber(latestVo2.value)} mL/kg/min
+                {latestVo2 ? `VO₂ max ${formatNumber(latestVo2.value)}` : `VO₂ max ≈ ${formatNumber(estimate!.value)}`} mL/kg/min
+                {latestVo2 && estimate ? `  ·  est. ${formatNumber(estimate.value)}` : ''}
               </AppText>
             </View>
           ) : null}

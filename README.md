@@ -32,6 +32,36 @@ npx eas-cli@latest build -p android --profile preview      # ~10–20 min
 
 Open the link/QR it prints on your phone, download the APK and install it (allow "Install unknown apps" for your browser when asked). The app ID is `com.jijothomas.tempo` (set in `app.json`) — change it before your first build if you ever plan to publish to Google Play, as it can't be changed afterwards.
 
+## Live heart rate (Garmin & any Bluetooth HR sensor)
+
+Tempo reads the standard Bluetooth **Heart Rate Service** (0x180D / 0x2A37), so it works with Garmin watches in broadcast mode (Venu 2 needs software 5.27+), and Polar / Wahoo / Garmin chest straps.
+
+1. On the watch: hold the bottom button › Settings › Wrist Heart Rate › **Broadcast** (or *Broadcast In Activity*).
+2. In Tempo: workout overview › **Heart rate** › *Find my watch*, tap it, and enter your age (or a measured max HR).
+3. During a session the timer shows live bpm, the target band for the current stage, and coaching. With voice coaching on, you'll hear a prompt after 15 s out of zone (at most every 45 s). Nothing is said during the first 60–120 s of a stage, while heart rate is still catching up.
+4. Sessions store average and peak heart rate and the % of hard-interval time spent in zone. The peak pre-fills the *Log metrics* screen.
+
+| Stage | Norwegian 4×4 | Interval Walking (approx.) |
+| --- | --- | --- |
+| Work | 85–95 % HRmax | 75–85 % HRmax |
+| Recovery | 60–70 % HRmax | 55–68 % HRmax |
+
+Max HR = your measured value, else Tanaka's estimate (208 − 0.7 × age). Bands live in `src/domain/protocols.ts`; logic in `src/domain/zones.ts`.
+
+**Needs a real build.** Bluetooth isn't available in Expo Go or the browser. There, a *demo sensor* simulates a heart that follows the plan, so the UI can still be tried. Build with `eas build -p android --profile preview` to use your watch. For day-to-day development with live reload *and* Bluetooth, make a development build once (`npx expo install expo-dev-client`, then `eas build -p android --profile development`).
+
+## Estimated VO₂ max
+
+After every session with heart-rate data, Tempo estimates VO₂ max with the **heart-rate ratio method** (Uth et al., *Eur J Appl Physiol* 2004): `VO₂max ≈ 15.3 × HRmax ÷ HRrest`.
+
+- **Max HR is learned:** the highest heart rate you *hold for 10 s* in a workout raises it (single-sample sensor spikes are ignored, and the demo sensor never counts). A measured max you enter always wins.
+- **Resting HR:** type in the value Garmin Connect shows, or use *Heart rate › measure it now*, a 2-minute still reading that averages the final minute.
+- **Calibration:** log a VO₂ max from your Garmin once (*Log metrics*) and Tempo derives a personal factor, so the estimate tracks your watch.
+- Shown as its own trend in the Journal (± error band), on the session summary, and on Home. Treat it as a trend, not a lab value.
+- Logic: `src/domain/vo2.ts` (pure, tested in `tests/vo2.test.ts`).
+
+Garmin's own VO₂ max can't be read automatically: Garmin doesn't share it with Health Connect, and its developer API is for approved businesses only.
+
 ## What's inside
 
 | Screen | File |
@@ -77,3 +107,14 @@ src/
 - To use audio chimes instead of speech, replace `say()` in `src/lib/cues.ts` with an `expo-audio` player.
 
 > Heart-rate zones are guidance, not medical advice. If you have a heart condition or haven't trained at high intensity before, check with a clinician before starting the 4×4.
+
+## Background cues (Android)
+
+Android pauses an app's JavaScript timers once another app is in front, so in-app voice cues would only play when you came back to Tempo. During a workout Tempo therefore starts a small foreground service (`modules/tempo-workout`, a local Expo module):
+
+- The workout screen sends the full cue schedule — stage announcements, 3-2-1, halfway, one minute left, workout complete — as wall-clock times (`src/domain/cuePlan.ts`, tested in `tests/cuePlan.test.ts`). It is rebuilt on pause, resume and skip.
+- The service speaks them with Android text-to-speech, briefly ducking music or podcasts, and vibrates — whatever app is open and with the screen off.
+- A "workout in progress" notification shows the current stage with a live countdown; tap it to return.
+- Being a foreground service keeps the Bluetooth heart-rate stream alive in the background too.
+
+It needs a native build (`eas build --profile preview --platform android`); Expo Go, iOS and web fall back to in-app cues.
