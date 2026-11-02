@@ -1,5 +1,6 @@
 import type { DistanceUnit } from '../domain/track';
 import type { PhaseKind, ProtocolId } from '../domain/types';
+import type { ReminderSettings } from '../domain/weekPlan';
 
 export type WeightUnit = 'kg' | 'lbs';
 
@@ -94,6 +95,10 @@ export interface Settings {
   lastBackupAt?: number;
   /** "Not now" on the backup reminder (epoch ms). */
   backupSnoozedAt?: number;
+  /** Sessions per week to aim for; missing protocols use the defaults (domain/weekPlan.ts). */
+  weeklyGoals?: Partial<Record<ProtocolId, number>>;
+  /** Workout reminders (local notifications). Kept per phone: not copied when merging a backup. */
+  reminders?: ReminderSettings;
 }
 
 export interface PersistedState {
@@ -173,7 +178,25 @@ export function parsePersisted(raw: string | null): PersistedState {
     hrFocus: typeof s.hrFocus === 'boolean' ? s.hrFocus : undefined,
     lastBackupAt: num(s.lastBackupAt),
     backupSnoozedAt: num(s.backupSnoozedAt),
+    weeklyGoals: parseGoals(s.weeklyGoals),
+    reminders: parseReminders(s.reminders),
   };
 
   return { version: 1, sessions, metrics, settings };
+}
+
+const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max;
+
+function parseGoals(raw: unknown): Settings['weeklyGoals'] {
+  if (!isObj(raw)) return undefined;
+  const out: Partial<Record<ProtocolId, number>> = {};
+  for (const id of ['norwegian-4x4', 'japanese-iwt'] as const) if (isInt(raw[id], 0, 7)) out[id] = raw[id];
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function parseReminders(raw: unknown): ReminderSettings | undefined {
+  if (!isObj(raw)) return undefined;
+  if (typeof raw.enabled !== 'boolean' || !isInt(raw.hour, 0, 23) || !isInt(raw.minute, 0, 59) || !Array.isArray(raw.days)) return undefined;
+  const days = [...new Set(raw.days.filter((d): d is number => isInt(d, 0, 6)))];
+  return { enabled: raw.enabled, days, hour: raw.hour, minute: raw.minute };
 }

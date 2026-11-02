@@ -217,7 +217,11 @@ export function planRestore(
         version: 1,
         sessions: [...incoming.sessions].sort(newestFirst((s) => s.startedAt)),
         metrics: [...incoming.metrics].sort(newestFirst((m) => m.at)),
-        settings: { ...incoming.settings, lastBackupAt: backedUpAt(current.settings.lastBackupAt, incoming.settings.lastBackupAt, exportedAt) },
+        settings: {
+          ...incoming.settings,
+          lastBackupAt: backedUpAt(current.settings.lastBackupAt, incoming.settings.lastBackupAt, exportedAt),
+          reminders: current.settings.reminders,
+        },
       },
       writeIds: incoming.sessions.map((s) => s.id),
       removeIds: current.sessions.filter((s) => !keep.has(s.id)).map((s) => s.id),
@@ -239,7 +243,12 @@ export function planRestore(
       metrics: [...current.metrics, ...newMetrics].sort(newestFirst((m) => m.at)),
       // A fresh install has nothing worth keeping, so take the backup's settings as they are.
       settings: phoneIsEmpty
-        ? { ...incoming.settings, lastBackupAt: backedUpAt(current.settings.lastBackupAt, incoming.settings.lastBackupAt, exportedAt) }
+        ? {
+            ...incoming.settings,
+            lastBackupAt: backedUpAt(current.settings.lastBackupAt, incoming.settings.lastBackupAt, exportedAt),
+            // Reminders need this phone's notification permission, so they're never taken from a backup.
+            reminders: current.settings.reminders,
+          }
         : mergeSettings(current.settings, incoming.settings),
     },
     writeIds: newSessions.map((s) => s.id),
@@ -252,11 +261,12 @@ export function planRestore(
 /**
  * The phone's settings win. Gaps are filled from the backup, the newer
  * resting heart rate is kept, and the higher learned max heart rate is kept.
- * The cue voice isn't copied: voices differ between phones.
+ * The cue voice and reminders aren't copied: voices differ between phones,
+ * and reminders need this phone's notification permission.
  */
 export function mergeSettings(current: Settings, incoming: Settings): Settings {
   const out: Settings = { ...current };
-  const fill = <K extends 'distanceUnit' | 'age' | 'maxHr' | 'hrDevice' | 'vo2Factor'>(k: K) => {
+  const fill = <K extends 'distanceUnit' | 'age' | 'maxHr' | 'hrDevice' | 'vo2Factor' | 'weeklyGoals'>(k: K) => {
     if (out[k] === undefined && incoming[k] !== undefined) out[k] = incoming[k];
   };
   fill('distanceUnit');
@@ -264,6 +274,7 @@ export function mergeSettings(current: Settings, incoming: Settings): Settings {
   fill('maxHr');
   fill('hrDevice');
   fill('vo2Factor');
+  fill('weeklyGoals');
 
   if (incoming.restingHr !== undefined && (current.restingHr === undefined || (incoming.restingHrAt ?? 0) > (current.restingHrAt ?? 0))) {
     out.restingHr = incoming.restingHr;

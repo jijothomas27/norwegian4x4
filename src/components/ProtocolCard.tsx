@@ -15,10 +15,12 @@ import { PressableScale } from './PressableScale';
 interface Props {
   protocol: ProtocolDef;
   onPress: () => void;
+  /** Today's suggestion from the weekly plan. */
+  suggested?: boolean;
 }
 
 /** Large tactile card on the home screen — one per workout protocol. */
-export function ProtocolCard({ protocol, onPress }: Props) {
+export function ProtocolCard({ protocol, onPress, suggested }: Props) {
   const phases = useMemo(() => buildPhases(protocol, protocol.defaults), [protocol]);
   const minutes = formatMinutes(totalDurationMs(phases) / 1000);
   const structure =
@@ -30,7 +32,7 @@ export function ProtocolCard({ protocol, onPress }: Props) {
     <PressableScale
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`${protocol.name}. ${protocol.tagline} ${minutes}.`}
+      accessibilityLabel={`${suggested ? 'Suggested today. ' : ''}${protocol.name}. ${protocol.tagline} ${minutes}.`}
       accessibilityHint="Opens the session overview"
       style={styles.card}
     >
@@ -49,9 +51,18 @@ export function ProtocolCard({ protocol, onPress }: Props) {
       </Svg>
 
       <View style={styles.top}>
-        <AppText variant="eyebrow" color={protocol.accent}>
-          {protocol.eyebrow}
-        </AppText>
+        <View style={styles.eyebrowRow}>
+          <AppText variant="eyebrow" color={protocol.accent}>
+            {protocol.eyebrow}
+          </AppText>
+          {suggested ? (
+            <View style={[styles.badge, { borderColor: protocol.accent }]}>
+              <AppText variant="eyebrow" color={colors.text} style={styles.badgeText}>
+                Today
+              </AppText>
+            </View>
+          ) : null}
+        </View>
         <AppText variant="title" style={styles.name}>
           {protocol.name}
         </AppText>
@@ -95,6 +106,20 @@ const styles = StyleSheet.create({
   },
   top: {
     paddingRight: 48,
+  },
+  eyebrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  badge: {
+    marginLeft: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: 10,
   },
   name: {
     marginTop: 10,

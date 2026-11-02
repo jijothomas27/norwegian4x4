@@ -7,8 +7,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppText } from '../../components/AppText';
 import { FadeIn } from '../../components/FadeIn';
 import { ProtocolCard } from '../../components/ProtocolCard';
+import { WeekCard } from '../../components/WeekCard';
 import { PROTOCOL_LIST } from '../../domain/protocols';
+import { goalsFrom, streak as weekStreak, suggestion as todaysSuggestion, weekProgress } from '../../domain/weekPlan';
 import { formatLongDate, formatNumber, greeting } from '../../lib/format';
+import { remindersLine, suggestionLine } from '../../lib/planText';
+import { reminderSettings, remindersSupported } from '../../state/reminders';
 import { metricSeries, weekSummary } from '../../state/selectors';
 import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
@@ -25,10 +29,17 @@ export default function HomeScreen() {
   const latestVo2 = useMemo(() => metricSeries(state.metrics, 'vo2max').at(-1), [state.metrics]);
   const estimate = vo2EstimateFor(state.settings);
 
+  const goals = useMemo(() => goalsFrom(state.settings.weeklyGoals), [state.settings.weeklyGoals]);
+  const progress = useMemo(() => weekProgress(state.sessions, goals, now), [state.sessions, goals, now]);
+  const streak = useMemo(() => weekStreak(state.sessions, goals, now), [state.sessions, goals, now]);
+  const suggestion = useMemo(() => todaysSuggestion(state.sessions, goals, now), [state.sessions, goals, now]);
+  const suggested = suggestion.kind === 'train' ? suggestion.protocolId : null;
+
   const weekLine =
-    week.sessions === 0
+    suggestionLine(suggestion) ??
+    (week.sessions === 0
       ? 'A quiet week so far. Begin when you’re ready.'
-      : `${week.sessions} session${week.sessions === 1 ? '' : 's'} · ${week.minutes} min in the last 7 days`;
+      : `${week.sessions} session${week.sessions === 1 ? '' : 's'} · ${week.minutes} min in the last 7 days`);
 
   return (
     <View style={styles.root}>
@@ -61,6 +72,17 @@ export default function HomeScreen() {
           ) : null}
         </FadeIn>
 
+        {state.hydrated ? (
+          <FadeIn delay={80} style={styles.weekCard}>
+            <WeekCard
+              progress={progress}
+              streak={streak}
+              footnote={remindersSupported ? remindersLine(reminderSettings(state.settings)) : 'Weekly plan'}
+              onPress={() => router.push('/plan')}
+            />
+          </FadeIn>
+        ) : null}
+
         <FadeIn delay={120}>
           <AppText variant="eyebrow" style={styles.section}>
             Choose your practice
@@ -69,7 +91,7 @@ export default function HomeScreen() {
 
         {PROTOCOL_LIST.map((p, i) => (
           <FadeIn key={p.id} delay={200 + i * 110} style={styles.cardGap}>
-            <ProtocolCard protocol={p} onPress={() => router.push({ pathname: '/prepare/[protocol]', params: { protocol: p.id } })} />
+            <ProtocolCard protocol={p} suggested={suggested === p.id} onPress={() => router.push({ pathname: '/prepare/[protocol]', params: { protocol: p.id } })} />
           </FadeIn>
         ))}
 
@@ -114,8 +136,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cyan,
     marginRight: 8,
   },
+  weekCard: {
+    marginTop: space.lg,
+  },
   section: {
-    marginTop: space.xxl,
+    marginTop: space.xl,
     marginBottom: space.md,
   },
   cardGap: {

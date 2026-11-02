@@ -268,3 +268,36 @@ test('file names use the local date', () => {
   assert.equal(backupFileName(new Date(2026, 0, 5, 23, 59).getTime(), 'json'), 'tempo-backup-2026-01-05.json');
   assert.equal(backupFileName(new Date(2026, 10, 1).getTime(), 'csv'), 'tempo-sessions-2026-11-01.csv');
 });
+
+test('weekly goals and reminders survive a save/load, malformed values are dropped', () => {
+  const reminders = { enabled: true, days: [1, 3, 5], hour: 18, minute: 30 };
+  const ok = parsePersisted(JSON.stringify({ settings: { weeklyGoals: { 'norwegian-4x4': 1, 'japanese-iwt': 5 }, reminders } }));
+  assert.deepEqual(ok.settings.weeklyGoals, { 'norwegian-4x4': 1, 'japanese-iwt': 5 });
+  assert.deepEqual(ok.settings.reminders, reminders);
+
+  const bad = parsePersisted(
+    JSON.stringify({ settings: { weeklyGoals: { 'norwegian-4x4': 12, 'japanese-iwt': 'x' }, reminders: { enabled: true, days: [1], hour: 25, minute: 0 } } }),
+  );
+  assert.equal(bad.settings.weeklyGoals, undefined);
+  assert.equal(bad.settings.reminders, undefined);
+
+  const days = parsePersisted(JSON.stringify({ settings: { reminders: { enabled: false, days: [1, 1, 9, 'x', 0], hour: 7, minute: 0 } } }));
+  assert.deepEqual(days.settings.reminders?.days, [1, 0]);
+});
+
+test('restoring never takes reminders from the backup; goals fill a gap', () => {
+  const phoneReminders = { enabled: true, days: [2], hour: 7, minute: 0 };
+  const backupSettings = { ...DEFAULT_SETTINGS, weeklyGoals: { 'norwegian-4x4': 1 }, reminders: { enabled: true, days: [0], hour: 20, minute: 0 } };
+  const merged = mergeSettings({ ...DEFAULT_SETTINGS, reminders: phoneReminders }, backupSettings);
+  assert.deepEqual(merged.reminders, phoneReminders);
+  assert.deepEqual(merged.weeklyGoals, { 'norwegian-4x4': 1 });
+  assert.deepEqual(mergeSettings({ ...DEFAULT_SETTINGS, weeklyGoals: { 'japanese-iwt': 3 } }, backupSettings).weeklyGoals, { 'japanese-iwt': 3 });
+
+  const empty: PersistedState = { version: 1, sessions: [], metrics: [], settings: DEFAULT_SETTINGS };
+  const incoming: PersistedState = { version: 1, sessions: [session('a', NOW)], metrics: [], settings: backupSettings };
+  const newPhone = planRestore(empty, incoming, 'merge', NOW);
+  assert.equal(newPhone.journal.settings.reminders, undefined);
+  assert.deepEqual(newPhone.journal.settings.weeklyGoals, { 'norwegian-4x4': 1 });
+  const replaced = planRestore({ ...empty, settings: { ...DEFAULT_SETTINGS, reminders: phoneReminders } }, incoming, 'replace', NOW);
+  assert.deepEqual(replaced.journal.settings.reminders, phoneReminders);
+});

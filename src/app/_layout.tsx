@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { HeartRateProvider } from '../hr/HeartRateProvider';
 import { useApplyVoice } from '../hooks/useVoice';
+import { remindersSupported, useReminderSync, useReminderTaps } from '../state/reminders';
 import { StoreProvider } from '../state/store';
 import { colors } from '../theme/tokens';
 
@@ -31,6 +32,8 @@ export default function RootLayout() {
       <HeartRateProvider>
         <ThemeProvider value={theme}>
           <VoiceSetup />
+          <ReminderSync />
+          {remindersSupported ? <ReminderTaps /> : null}
           <StatusBar style="light" />
           <Stack
             screenOptions={{
@@ -53,6 +56,7 @@ export default function RootLayout() {
             <Stack.Screen name="heart-rate" options={{ presentation: 'modal' }} />
             <Stack.Screen name="voice" options={{ presentation: 'modal' }} />
             <Stack.Screen name="backup" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="plan" options={{ presentation: 'modal' }} />
             <Stack.Screen name="resting-check" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />
           </Stack>
         </ThemeProvider>
@@ -64,5 +68,17 @@ export default function RootLayout() {
 /** Applies the chosen cue voice (needs the store, so it lives inside the providers). */
 function VoiceSetup() {
   useApplyVoice();
+  return null;
+}
+
+/** Keeps workout reminders scheduled to match the journal and weekly plan. */
+function ReminderSync() {
+  useReminderSync();
+  return null;
+}
+
+/** Opens the suggested workout when a reminder is tapped (native only). */
+function ReminderTaps() {
+  useReminderTaps();
   return null;
 }
