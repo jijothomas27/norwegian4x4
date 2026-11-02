@@ -7,7 +7,8 @@ import { decodeSeries, encodeSeries, type HrSeries } from '../domain/hrSeries';
  * Per-session heart-rate series live under their own keys (like routes), so
  * the main journal stays small and quick to load.
  */
-const key = (sessionId: string) => `@tempo/hr/v1/${sessionId}`;
+export const hrSeriesKey = (sessionId: string) => `@tempo/hr/v1/${sessionId}`;
+const key = hrSeriesKey;
 
 export async function saveHrSeries(sessionId: string, series: HrSeries): Promise<void> {
   await AsyncStorage.setItem(key(sessionId), encodeSeries(series));

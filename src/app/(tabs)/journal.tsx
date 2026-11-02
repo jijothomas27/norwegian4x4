@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -5,25 +6,30 @@ import { SectionList, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
-import { GhostButton } from '../../components/Buttons';
+import { GhostButton, IconButton } from '../../components/Buttons';
 import { FadeIn } from '../../components/FadeIn';
 import { JournalRow } from '../../components/JournalRow';
+import { PressableScale } from '../../components/PressableScale';
 import { ActionSheet } from '../../components/Sheet';
 import { TrendCard } from '../../components/TrendCard';
 import { Vo2EstimateCard } from '../../components/Vo2EstimateCard';
+import { needsBackupNudge } from '../../domain/backup';
 import { getProtocol } from '../../domain/protocols';
 import { defaultDistanceUnit } from '../../domain/track';
+import { useNow } from '../../hooks/useNow';
 import { kgToUnit } from '../../lib/format';
 import type { JournalEntry } from '../../state/model';
 import { journalSections, metricSeries } from '../../state/selectors';
 import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
-import { colors, space } from '../../theme/tokens';
+import { colors, radius, space } from '../../theme/tokens';
 
 export default function JournalScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { state, deleteMetric, deleteSession } = useStore();
+  const { state, deleteMetric, deleteSession, updateSettings } = useStore();
+  const now = useNow();
+  const showBackupNudge = state.hydrated && needsBackupNudge(state.sessions, state.settings, now);
   const [pendingDelete, setPendingDelete] = useState<JournalEntry | null>(null);
 
   const unit = state.settings.weightUnit;
@@ -69,16 +75,50 @@ export default function JournalScreen() {
   const header = (
     <View>
       <FadeIn>
-        <AppText variant="eyebrow">Progress</AppText>
-        <AppText variant="display" style={{ marginTop: 10 }}>
-          Journal
-        </AppText>
+        <View style={styles.titleRow}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="eyebrow">Progress</AppText>
+            <AppText variant="display" style={{ marginTop: 10 }}>
+              Journal
+            </AppText>
+          </View>
+          <IconButton icon="cloud-upload-outline" label="Data and backup" onPress={() => router.push('/backup')} />
+        </View>
         <AppText variant="body" style={{ marginTop: 8 }}>
           {state.sessions.length === 0
             ? 'Your sessions and readings will gather here.'
             : `${state.sessions.length} session${state.sessions.length === 1 ? '' : 's'} · ${totalMinutes} minutes of practice`}
         </AppText>
       </FadeIn>
+
+      {showBackupNudge ? (
+        <FadeIn delay={60} style={styles.nudge}>
+          <Ionicons name="cloud-upload-outline" size={20} color={colors.amber} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <AppText variant="callout">Back up your journal?</AppText>
+            <AppText variant="caption" style={{ marginTop: 2 }}>
+              It only lives on this phone. A backup file keeps it safe if the phone is lost or replaced.
+            </AppText>
+            <View style={styles.nudgeActions}>
+              <PressableScale onPress={() => router.push('/backup')} accessibilityRole="button" accessibilityLabel="Back up now" hitSlop={8}>
+                <AppText variant="callout" color={colors.amber}>
+                  Back up
+                </AppText>
+              </PressableScale>
+              <PressableScale
+                onPress={() => updateSettings({ backupSnoozedAt: Date.now() })}
+                accessibilityRole="button"
+                accessibilityLabel="Remind me later"
+                hitSlop={8}
+              >
+                <AppText variant="callout" color={colors.textTertiary}>
+                  Not now
+                </AppText>
+              </PressableScale>
+            </View>
+          </View>
+        </FadeIn>
+      ) : null}
 
       <FadeIn delay={100} style={styles.trends}>
         <TrendCard
@@ -200,6 +240,23 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.bg,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  nudge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginTop: space.lg,
+    padding: 14,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,179,71,0.08)',
+  },
+  nudgeActions: {
+    flexDirection: 'row',
+    gap: 24,
+    marginTop: 10,
   },
   trends: {
     flexDirection: 'row',

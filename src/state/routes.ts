@@ -6,7 +6,8 @@ import type { RoutePoint } from '../domain/track';
  * GPS routes live under their own storage keys, one per session, so the main
  * journal stays small and quick to load.
  */
-const key = (sessionId: string) => `@tempo/route/v1/${sessionId}`;
+export const routeKey = (sessionId: string) => `@tempo/route/v1/${sessionId}`;
+const key = routeKey;
 
 export async function saveRoute(sessionId: string, route: readonly RoutePoint[]): Promise<void> {
   if (route.length < 2) return;

@@ -90,6 +90,10 @@ export interface Settings {
   vo2Factor?: number;
   /** Workout screen: show heart rate big inside the ring (and the clock in the panel). */
   hrFocus?: boolean;
+  /** When the journal was last exported as a backup file (epoch ms). */
+  lastBackupAt?: number;
+  /** "Not now" on the backup reminder (epoch ms). */
+  backupSnoozedAt?: number;
 }
 
 export interface PersistedState {
@@ -167,6 +171,8 @@ export function parsePersisted(raw: string | null): PersistedState {
     learnedMaxHrAt: num(s.learnedMaxHrAt),
     vo2Factor: num(s.vo2Factor),
     hrFocus: typeof s.hrFocus === 'boolean' ? s.hrFocus : undefined,
+    lastBackupAt: num(s.lastBackupAt),
+    backupSnoozedAt: num(s.backupSnoozedAt),
   };
 
   return { version: 1, sessions, metrics, settings };

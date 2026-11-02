@@ -36,7 +36,8 @@ type Action =
   | { type: 'updateSession'; id: string; patch: Partial<Omit<SessionEntry, 'id' | 'type'>> }
   | { type: 'addMetric'; entry: MetricEntry }
   | { type: 'deleteMetric'; id: string }
-  | { type: 'updateSettings'; patch: Partial<Settings> };
+  | { type: 'updateSettings'; patch: Partial<Settings> }
+  | { type: 'restore'; state: PersistedState };
 
 function reducer(state: StoreState, action: Action): StoreState {
   switch (action.type) {
@@ -54,6 +55,8 @@ function reducer(state: StoreState, action: Action): StoreState {
       return { ...state, metrics: state.metrics.filter((m) => m.id !== action.id) };
     case 'updateSettings':
       return { ...state, settings: { ...state.settings, ...action.patch } };
+    case 'restore':
+      return { ...action.state, hydrated: true };
   }
 }
 
@@ -65,6 +68,8 @@ interface StoreApi {
   addMetric: (entry: Omit<MetricEntry, 'id' | 'type' | 'at'> & { at?: number }) => MetricEntry;
   deleteMetric: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
+  /** Swaps in a restored journal (see state/backup.ts — write routes and HR series first). */
+  restoreJournal: (journal: PersistedState) => void;
 }
 
 const StoreContext = createContext<StoreApi | null>(null);
@@ -129,10 +134,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const updateSession = useCallback<StoreApi['updateSession']>((id, patch) => dispatch({ type: 'updateSession', id, patch }), []);
   const deleteMetric = useCallback((id: string) => dispatch({ type: 'deleteMetric', id }), []);
   const updateSettings = useCallback((patch: Partial<Settings>) => dispatch({ type: 'updateSettings', patch }), []);
+  const restoreJournal = useCallback((journal: PersistedState) => dispatch({ type: 'restore', state: journal }), []);
 
   const api = useMemo<StoreApi>(
-    () => ({ state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings }),
-    [state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings],
+    () => ({ state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings, restoreJournal }),
+    [state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings, restoreJournal],
   );
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;
