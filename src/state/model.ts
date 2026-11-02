@@ -28,6 +28,8 @@ export interface SessionEntry {
     recovery?: number[];
     recoveryAvg?: number;
   };
+  /** Heart rate over the whole workout is stored separately (state/hrSeries.ts). */
+  hasHrSeries?: boolean;
   /** Present when GPS was recording. The route itself is stored separately (state/routes.ts). */
   gps?: {
     distanceM: number;

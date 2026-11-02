@@ -7,14 +7,17 @@ import { AppText } from '../components/AppText';
 import { GhostButton, PrimaryButton } from '../components/Buttons';
 import { FadeIn } from '../components/FadeIn';
 import { FitnessCard } from '../components/FitnessCard';
+import { HrChart } from '../components/HrChart';
 import { PhaseBackdrop } from '../components/PhaseBackdrop';
 import { ProgressRing } from '../components/ProgressRing';
 import { RouteSketch } from '../components/RouteSketch';
 import { buildPhases, getProtocol, normalizeConfig } from '../domain/protocols';
-import { formatMinutes } from '../domain/timeline';
+import { zoneStatsByRound, type RoundZoneStat } from '../domain/hrSeries';
+import { formatClock, formatMinutes } from '../domain/timeline';
 import { defaultDistanceUnit, formatDistance, formatPace, type DistanceUnit } from '../domain/track';
 import type { SessionEntry } from '../state/model';
 import { formatLongDate, formatTime } from '../lib/format';
+import { useHrSeries } from '../state/hrSeries';
 import { useStore } from '../state/store';
 import { colors, radius } from '../theme/tokens';
 
@@ -26,6 +29,7 @@ export default function SummaryScreen() {
   const { state } = useStore();
 
   const session = state.sessions.find((s) => s.id === id);
+  const series = useHrSeries(id, session?.hasHrSeries === true);
   if (!session) {
     // Should never happen (the session is written before we navigate here),
     // but never strand the user on a blank screen.
@@ -103,6 +107,21 @@ export default function SummaryScreen() {
             </FadeIn>
           ) : null}
 
+          {series ? (
+            <FadeIn delay={460} style={styles.chartCard}>
+              <View style={styles.chartHeader}>
+                <AppText variant="eyebrow" color={colors.textSecondary}>
+                  Heart rate
+                </AppText>
+                <View style={styles.legend}>
+                  <View style={[styles.legendSwatch, { backgroundColor: def.accent }]} />
+                  <AppText variant="caption">target zone</AppText>
+                </View>
+              </View>
+              <HrChart series={series} height={190} />
+            </FadeIn>
+          ) : null}
+
           {session.gps ? (
             <FadeIn delay={470} style={styles.hrRow}>
               <Ionicons name="navigate-outline" size={14} color={colors.textSecondary} />
@@ -121,7 +140,12 @@ export default function SummaryScreen() {
           ) : null}
 
           <FadeIn delay={500} style={{ alignSelf: 'stretch' }}>
-            <RoundsTable session={session} unit={unit} accent={def.accent} />
+            <RoundsTable
+              session={session}
+              unit={unit}
+              accent={def.accent}
+              zone={series ? zoneStatsByRound(series).filter((z) => z.hasData) : []}
+            />
           </FadeIn>
         </View>
 
@@ -160,24 +184,38 @@ function formatClimb(m: number, unit: DistanceUnit): string {
  * One line per hard interval: pace and climb (GPS) and how far your heart
  * rate fell in the first minute of the recovery that followed.
  */
-function RoundsTable({ session, unit, accent }: { session: SessionEntry; unit: DistanceUnit; accent: string }) {
+function RoundsTable({
+  session,
+  unit,
+  accent,
+  zone,
+}: {
+  session: SessionEntry;
+  unit: DistanceUnit;
+  accent: string;
+  zone: readonly RoundZoneStat[];
+}) {
   const work = session.gps?.stages.filter((s) => s.kind === 'work') ?? [];
   const recovery = session.hr?.recovery ?? [];
-  const rounds = Math.max(work.length, recovery.length);
+  const showZone = zone.some((z) => z.inZonePct !== null);
+  const rounds = Math.max(work.length, recovery.length, showZone ? zone.length : 0);
   if (rounds === 0) return null;
   const showPace = work.length > 0;
   const showRecovery = recovery.length > 0;
+  const workSec = getProtocol(session.protocolId).workSec;
   return (
     <View style={styles.table}>
       <View style={styles.tableRow}>
         <AppText variant="caption" style={styles.cellRound}>Round</AppText>
         {showPace ? <AppText variant="caption" style={styles.cell}>Pace</AppText> : null}
         {showPace ? <AppText variant="caption" style={styles.cell}>Distance</AppText> : null}
+        {showZone ? <AppText variant="caption" style={styles.cell}>To zone</AppText> : null}
         {showRecovery ? <AppText variant="caption" style={styles.cell}>HR recovery</AppText> : null}
       </View>
       {Array.from({ length: rounds }, (_, i) => {
         const w = work[i];
         const r = recovery[i];
+        const z = zone.find((s) => s.round === (w?.round ?? i + 1));
         return (
           <View key={i} style={[styles.tableRow, styles.tableDivider]}>
             <AppText variant="callout" color={accent} style={styles.cellRound}>
@@ -189,6 +227,11 @@ function RoundsTable({ session, unit, accent }: { session: SessionEntry; unit: D
                 {w ? formatDistance(w.distanceM, unit) : '—'}
               </AppText>
             ) : null}
+            {showZone ? (
+              <AppText variant="callout" style={styles.cell}>
+                {formatTimeToZone(z, workSec)}
+              </AppText>
+            ) : null}
             {showRecovery ? (
               <AppText variant="callout" style={styles.cell}>
                 {r !== undefined ? `−${r} bpm` : '—'}
@@ -197,14 +240,25 @@ function RoundsTable({ session, unit, accent }: { session: SessionEntry; unit: D
           </View>
         );
       })}
-      {showRecovery ? (
+      {showZone ? (
         <AppText variant="caption" style={{ marginTop: 10 }}>
+          To zone: how long each hard interval took to bring your heart rate up into its target band.
+        </AppText>
+      ) : null}
+      {showRecovery ? (
+        <AppText variant="caption" style={{ marginTop: showZone ? 6 : 10 }}>
           HR recovery: how far your heart rate fell in the first minute after each hard interval. A bigger drop over the weeks means
           a fitter heart.
         </AppText>
       ) : null}
     </View>
   );
+}
+
+function formatTimeToZone(z: RoundZoneStat | undefined, workSec: number): string {
+  if (!z || z.inZonePct === null) return '—';
+  if (z.timeToZoneSec === null) return `>${formatClock(workSec * 1000)}`;
+  return formatClock(z.timeToZoneSec * 1000);
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -228,6 +282,33 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     paddingHorizontal: 24,
+  },
+  chartCard: {
+    alignSelf: 'stretch',
+    marginTop: 20,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: radius.lg,
+    paddingHorizontal: 12,
+    paddingTop: 14,
+    paddingBottom: 8,
+  },
+  chartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 4,
+    marginBottom: 4,
+  },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendSwatch: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+    opacity: 0.5,
+    marginRight: 6,
   },
   routeCard: {
     alignSelf: 'stretch',

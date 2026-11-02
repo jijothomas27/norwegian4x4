@@ -16,6 +16,7 @@ import { ActionSheet, type SheetAction } from '../../components/Sheet';
 import { buildPhases, getProtocol, isProtocolId, normalizeConfig } from '../../domain/protocols';
 import { formatClock } from '../../domain/timeline';
 import type { HrSummary } from '../../domain/hrStats';
+import { buildSeries, type RawHrSample } from '../../domain/hrSeries';
 import { learnMaxHr } from '../../domain/vo2';
 import type { ProtocolDef, WorkoutConfig } from '../../domain/types';
 import { useBackgroundSession } from '../../hooks/useBackgroundSession';
@@ -23,6 +24,7 @@ import { useIntervalTimer, type TimerResult } from '../../hooks/useIntervalTimer
 import { useWorkoutGps, type GpsResult } from '../../hooks/useWorkoutGps';
 import { useWorkoutHeartRate } from '../../hooks/useWorkoutHeartRate';
 import { LiveGps } from '../../components/LiveGps';
+import { saveHrSeries } from '../../state/hrSeries';
 import { saveRoute } from '../../state/routes';
 import { cues, type CueOptions } from '../../lib/cues';
 import { maxHrFor, vo2EstimateFor } from '../../state/fitness';
@@ -34,7 +36,13 @@ const MIN_SAVE_MS = 60_000;
 const DEV_SPEED = 30;
 const WAKE_TAG = 'tempo-workout';
 
-const summarizeNone = () => ({ summary: null as HrSummary | null, isDemo: false });
+interface HrFinish {
+  summary: HrSummary | null;
+  isDemo: boolean;
+  samples: readonly RawHrSample[];
+}
+
+const summarizeNone = (): HrFinish => ({ summary: null, isDemo: false, samples: [] });
 
 /** Keep the display on for the whole session (errors ignored — e.g. unsupported browsers). */
 function useScreenAwake() {
@@ -73,7 +81,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
 
   // The heart-rate hook needs the timer's position, so it's created after the
   // timer; finish() reaches its summary through this ref.
-  const hrSummaryRef = useRef<() => { summary: HrSummary | null; isDemo: boolean }>(summarizeNone);
+  const hrSummaryRef = useRef<() => HrFinish>(summarizeNone);
   const gpsFinishRef = useRef<() => Promise<GpsResult | null>>(async () => null);
   const finishing = useRef(false);
 
@@ -81,7 +89,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
     async (result: TimerResult, completed: boolean) => {
       if (finishing.current) return;
       finishing.current = true;
-      const { summary: hrSummary, isDemo } = hrSummaryRef.current();
+      const { summary: hrSummary, isDemo, samples: hrSamples } = hrSummaryRef.current();
       const gpsResult = await gpsFinishRef.current().catch(() => null);
       // A sustained peak above what we knew raises the learned max HR,
       // which sharpens both the zones and the VO₂ max estimate.
@@ -94,6 +102,8 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
           updateSettings({ learnedMaxHr: learned, learnedMaxHrAt: result.endedAt });
         }
       }
+      // Bands are drawn with the max heart rate that was in effect during the workout.
+      const hrSeries = buildSeries(hrSamples, phases, maxBefore?.bpm ?? null);
       const vo2 = hrSummary ? vo2EstimateFor(settings) : null;
       const maxAfter = hrSummary ? maxHrFor(settings) : null;
       const entry = addSession({
@@ -105,6 +115,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         totalRounds: config.rounds,
         completed,
         hr: hrSummary ?? undefined,
+        hasHrSeries: hrSeries ? true : undefined,
         vo2Estimate: vo2?.value,
         maxHr: maxAfter
           ? {
@@ -116,9 +127,10 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
         gps: gpsResult?.gps,
       });
       if (gpsResult?.gps.hasRoute) await saveRoute(entry.id, gpsResult.route).catch(() => {});
+      if (hrSeries) await saveHrSeries(entry.id, hrSeries).catch(() => {});
       router.replace({ pathname: '/summary', params: { id: entry.id } });
     },
-    [addSession, config.rounds, def.id, router, state.settings, updateSettings],
+    [addSession, config.rounds, def.id, phases, router, state.settings, updateSettings],
   );
 
   const timer = useIntervalTimer(phases, {
@@ -143,11 +155,11 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
   // Android: keep cues (and the heart-rate stream) going when another app is in front.
   useBackgroundSession(phases, timer, cueOpts);
 
-  const heart = useWorkoutHeartRate(timer.position, timer.status, cueOpts, timer.positionAt);
-  const { getSummary, isDemo } = heart;
+  const heart = useWorkoutHeartRate(timer.position, timer.status, cueOpts, timer.positionAt, timer.toTimeline);
+  const { getSummary, getSamples, isDemo } = heart;
   useEffect(() => {
-    hrSummaryRef.current = () => ({ summary: getSummary(), isDemo });
-  }, [getSummary, isDemo]);
+    hrSummaryRef.current = () => ({ summary: getSummary(), isDemo, samples: getSamples() });
+  }, [getSummary, getSamples, isDemo]);
 
   const gps = useWorkoutGps(def, phases, timer, timer.position, cueOpts, heart.connection === 'connected' && heart.bpm !== null);
   const gpsFinish = gps.finish;

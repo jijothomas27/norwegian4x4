@@ -19,6 +19,7 @@ import {
   type SessionEntry,
   type Settings,
 } from './model';
+import { deleteHrSeries } from './hrSeries';
 import { deleteRoute } from './routes';
 
 const STORAGE_KEY = '@tempo/journal/v1';
@@ -123,6 +124,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const deleteSession = useCallback((id: string) => {
     dispatch({ type: 'deleteSession', id });
     deleteRoute(id);
+    deleteHrSeries(id);
   }, []);
   const updateSession = useCallback<StoreApi['updateSession']>((id, patch) => dispatch({ type: 'updateSession', id, patch }), []);
   const deleteMetric = useCallback((id: string) => dispatch({ type: 'deleteMetric', id }), []);
