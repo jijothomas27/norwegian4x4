@@ -125,6 +125,8 @@ export function useWorkoutGps(
             distanceM: Math.round(st.distanceM),
             paceSecPerKm: st.paceSecPerKm ?? undefined,
             climbM: Math.round(st.climbM),
+            movingSec: Math.round(st.movingSec),
+            steadyPaceSecPerKm: st.steadyPaceSecPerKm ?? undefined,
           })),
         hasRoute: route.length >= 2,
       },

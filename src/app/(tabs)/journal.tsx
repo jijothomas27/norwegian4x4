@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
 import { GhostButton, IconButton } from '../../components/Buttons';
+import { EfficiencyCard } from '../../components/EfficiencyCard';
 import { FadeIn } from '../../components/FadeIn';
 import { JournalRow } from '../../components/JournalRow';
 import { PressableScale } from '../../components/PressableScale';
@@ -14,12 +15,14 @@ import { ActionSheet } from '../../components/Sheet';
 import { TrendCard } from '../../components/TrendCard';
 import { Vo2EstimateCard } from '../../components/Vo2EstimateCard';
 import { needsBackupNudge } from '../../domain/backup';
+import { efficiencyTrend } from '../../domain/efficiency';
 import { getProtocol } from '../../domain/protocols';
 import { defaultDistanceUnit } from '../../domain/track';
 import { useNow } from '../../hooks/useNow';
 import { kgToUnit } from '../../lib/format';
 import type { JournalEntry } from '../../state/model';
 import { journalSections, metricSeries } from '../../state/selectors';
+import { efficiencyPoints, efficiencyRef } from '../../state/efficiency';
 import { vo2EstimateFor } from '../../state/fitness';
 import { useStore } from '../../state/store';
 import { colors, radius, space } from '../../theme/tokens';
@@ -69,6 +72,16 @@ export default function JournalScreen() {
         .sort((a, b) => a.at - b.at),
     [state.sessions],
   );
+
+  const hasWalks = state.sessions.some((s) => s.protocolId === 'japanese-iwt');
+  const effRef = efficiencyRef(state.settings);
+  const effRest = effRef?.restHr;
+  const effMax = effRef?.maxHr;
+  const effPoints = useMemo(
+    () => (effRest && effMax ? efficiencyPoints(state.sessions, { restHr: effRest, maxHr: effMax }) : []),
+    [state.sessions, effRest, effMax],
+  );
+  const effTrend = useMemo(() => efficiencyTrend(effPoints), [effPoints]);
 
   const totalMinutes = Math.round(state.sessions.reduce((sum, s) => sum + s.durationSec, 0) / 60);
 
@@ -162,6 +175,12 @@ export default function JournalScreen() {
             higherIsBetter
             emptyHint="Needs full hard intervals with heart rate"
           />
+        </FadeIn>
+      ) : null}
+
+      {hasWalks ? (
+        <FadeIn delay={170} style={{ marginTop: 12 }}>
+          <EfficiencyCard trend={effTrend} points={effPoints} hrRef={effRef} unit={distanceUnit} />
         </FadeIn>
       ) : null}
 

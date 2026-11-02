@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 
 import { HeartRateProvider } from '../hr/HeartRateProvider';
 import { useApplyVoice } from '../hooks/useVoice';
+import { useEfficiencyBackfill } from '../state/efficiency';
 import { remindersSupported, useReminderSync, useReminderTaps } from '../state/reminders';
 import { StoreProvider } from '../state/store';
 import { colors } from '../theme/tokens';
@@ -33,6 +34,7 @@ export default function RootLayout() {
         <ThemeProvider value={theme}>
           <VoiceSetup />
           <ReminderSync />
+          <EfficiencyBackfill />
           {remindersSupported ? <ReminderTaps /> : null}
           <StatusBar style="light" />
           <Stack
@@ -80,5 +82,11 @@ function ReminderSync() {
 /** Opens the suggested workout when a reminder is tapped (native only). */
 function ReminderTaps() {
   useReminderTaps();
+  return null;
+}
+
+/** Works out walking-efficiency samples for walks recorded before the trend existed. */
+function EfficiencyBackfill() {
+  useEfficiencyBackfill();
   return null;
 }

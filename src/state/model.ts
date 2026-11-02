@@ -1,3 +1,4 @@
+import type { EfficiencySample } from '../domain/efficiency';
 import type { DistanceUnit } from '../domain/track';
 import type { PhaseKind, ProtocolId } from '../domain/types';
 import type { ReminderSettings } from '../domain/weekPlan';
@@ -36,11 +37,27 @@ export interface SessionEntry {
     distanceM: number;
     climbM: number;
     workPaceSecPerKm?: number;
-    stages: { kind: PhaseKind; round?: number; distanceM: number; paceSecPerKm?: number; climbM: number }[];
+    stages: {
+      kind: PhaseKind;
+      round?: number;
+      distanceM: number;
+      paceSecPerKm?: number;
+      climbM: number;
+      /** Seconds of tracked movement (sessions from Nov 2026 on). */
+      movingSec?: number;
+      /** Pace after the stage's first minute (sessions from Nov 2026 on). */
+      steadyPaceSecPerKm?: number;
+    }[];
     hasRoute: boolean;
   };
   /** Heart-rate-ratio VO₂ max estimate computed when the session ended. */
   vo2Estimate?: number;
+  /**
+   * Interval Walking only: speed and heart rate over the steady part of each
+   * fast walk that passed the quality checks (domain/efficiency.ts). An empty
+   * list means it was worked out and nothing qualified.
+   */
+  efficiency?: EfficiencySample[];
   /** Max heart rate in effect after this session; `previous` is set when the session raised it. */
   maxHr?: { bpm: number; source: 'measured' | 'workouts' | 'age'; previous?: number };
 }

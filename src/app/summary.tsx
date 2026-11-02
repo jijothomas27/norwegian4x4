@@ -17,6 +17,8 @@ import { formatClock, formatMinutes } from '../domain/timeline';
 import { defaultDistanceUnit, formatDistance, formatPace, type DistanceUnit } from '../domain/track';
 import type { SessionEntry } from '../state/model';
 import { formatLongDate, formatTime } from '../lib/format';
+import { cleanSamples, DISPLAY_FRACTION, paceAtFraction, sessionEfficiency, type HrRef } from '../domain/efficiency';
+import { efficiencyRef } from '../state/efficiency';
 import { useHrSeries } from '../state/hrSeries';
 import { useStore } from '../state/store';
 import { colors, radius } from '../theme/tokens';
@@ -42,6 +44,7 @@ export default function SummaryScreen() {
 
   const unit: DistanceUnit = state.settings.distanceUnit ?? defaultDistanceUnit(Intl.DateTimeFormat().resolvedOptions().locale);
   const phases = buildPhases(def, normalizeConfig(def, { rounds: session.totalRounds }));
+  const effLine = efficiencyLine(session, efficiencyRef(state.settings), unit);
 
   function done() {
     if (fromJournal) router.back();
@@ -129,6 +132,15 @@ export default function SummaryScreen() {
                 {formatDistance(session.gps.distanceM, unit)}
                 {session.gps.workPaceSecPerKm ? `  ·  ${formatPace(session.gps.workPaceSecPerKm, unit)} hard pace` : ''}
                 {session.gps.climbM >= 5 ? `  ·  ${formatClimb(session.gps.climbM, unit)} climb` : ''}
+              </AppText>
+            </FadeIn>
+          ) : null}
+
+          {effLine ? (
+            <FadeIn delay={480} style={styles.hrRow}>
+              <Ionicons name="walk-outline" size={14} color={colors.textSecondary} />
+              <AppText variant="caption" color={colors.textSecondary} style={{ marginLeft: 8, flexShrink: 1 }}>
+                {effLine}
               </AppText>
             </FadeIn>
           ) : null}
@@ -385,3 +397,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+/** One line on a walk's summary: the pace its fast walks imply at 75% of max heart rate. */
+function efficiencyLine(session: SessionEntry, ref: HrRef | null, unit: DistanceUnit): string | null {
+  if (session.protocolId !== 'japanese-iwt' || session.efficiency === undefined || !ref) return null;
+  const samples = cleanSamples(session.efficiency);
+  const index = sessionEfficiency(samples, ref);
+  const pace = index !== null ? paceAtFraction(index, ref) : null;
+  if (pace === null) return 'Walking efficiency: needs at least two steady fast walks on flat ground with GPS and heart rate';
+  return `Walking efficiency: ${formatPace(pace, unit)} at ${Math.round(DISPLAY_FRACTION * 100)}% max HR · from ${samples.length} fast walks`;
+}

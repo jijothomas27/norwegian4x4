@@ -68,6 +68,12 @@ export interface StageSplit {
   /** null when too little distance to tell. */
   paceSecPerKm: number | null;
   climbM: number;
+  /**
+   * Pace after the first `steadySkipSec` of the stage — once heart rate has
+   * caught up with the effort. Used for the walking-efficiency trend.
+   */
+  steadyPaceSecPerKm: number | null;
+  steadySec: number;
 }
 
 export interface TrackSummary {
@@ -87,6 +93,7 @@ export function summarizeTrack(
   points: readonly TrackPoint[],
   phases: readonly Phase[],
   toTimeline: (t: number) => number | null,
+  steadySkipSec = 60,
 ): TrackSummary {
   const offsets: number[] = [0];
   for (const p of phases) offsets.push(offsets[offsets.length - 1] + p.durationSec * 1000);
@@ -95,7 +102,7 @@ export function summarizeTrack(
     return -1;
   };
 
-  const acc = phases.map(() => ({ distanceM: 0, movingMs: 0, climbM: 0, altRef: null as number | null }));
+  const acc = phases.map(() => ({ distanceM: 0, movingMs: 0, climbM: 0, altRef: null as number | null, steadyM: 0, steadyMs: 0 }));
   const cleaned = cleanTrack(points);
 
   for (let i = 1; i < cleaned.length; i++) {
@@ -109,8 +116,13 @@ export function summarizeTrack(
     const stage = stageOf((ta + tb) / 2);
     if (stage < 0) continue;
     const s = acc[stage];
-    s.distanceM += distanceM(a, b);
+    const d = distanceM(a, b);
+    s.distanceM += d;
     s.movingMs += dt;
+    if ((ta + tb) / 2 - offsets[stage] >= steadySkipSec * 1000) {
+      s.steadyM += d;
+      s.steadyMs += dt;
+    }
     if (b.alt != null) {
       if (s.altRef === null) s.altRef = a.alt ?? b.alt;
       const rise = b.alt - s.altRef;
@@ -131,6 +143,8 @@ export function summarizeTrack(
     movingSec: acc[i].movingMs / 1000,
     paceSecPerKm: paceOf(acc[i].distanceM, acc[i].movingMs / 1000),
     climbM: acc[i].climbM,
+    steadyPaceSecPerKm: paceOf(acc[i].steadyM, acc[i].steadyMs / 1000),
+    steadySec: acc[i].steadyMs / 1000,
   }));
   const work = stages.filter((s) => s.kind === 'work');
   return {

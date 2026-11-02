@@ -117,3 +117,13 @@ test('brisk pace target prefers walks that were in zone', () => {
     550,
   );
 });
+
+test('steady pace leaves out the first minute of each stage', () => {
+  const phases = buildPhases(JAPANESE_IWT);
+  // Round 1 brisk: a slow first minute (1.2 m/s, still speeding up), then 1.8 m/s.
+  const pts = walk([1.2, 1.2, 1.2, 1.2, 1.8, 1.8]);
+  const brisk = summarizeTrack(pts, phases, (t) => t - T0).stages[1];
+  assert.ok(Math.abs(brisk.steadyPaceSecPerKm! - 1000 / 1.8) < 2);
+  assert.ok(Math.abs(brisk.steadySec - 120) < 2);
+  assert.ok(brisk.paceSecPerKm! > brisk.steadyPaceSecPerKm! + 50); // whole-stage pace includes the slow minute
+});

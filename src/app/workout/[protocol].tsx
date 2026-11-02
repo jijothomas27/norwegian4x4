@@ -16,6 +16,7 @@ import { ActionSheet, type SheetAction } from '../../components/Sheet';
 import { buildPhases, getProtocol, isProtocolId, normalizeConfig } from '../../domain/protocols';
 import { formatClock } from '../../domain/timeline';
 import type { HrSummary } from '../../domain/hrStats';
+import { efficiencySamples } from '../../domain/efficiency';
 import { buildSeries, type RawHrSample } from '../../domain/hrSeries';
 import { learnMaxHr } from '../../domain/vo2';
 import type { ProtocolDef, WorkoutConfig } from '../../domain/types';
@@ -104,6 +105,9 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
       }
       // Bands are drawn with the max heart rate that was in effect during the workout.
       const hrSeries = buildSeries(hrSamples, phases, maxBefore?.bpm ?? null);
+      // Walking efficiency: outdoor Interval Walking with GPS and a real sensor only.
+      const efficiency =
+        def.id === 'japanese-iwt' && hrSeries && gpsResult && !isDemo ? efficiencySamples(gpsResult.gps.stages, hrSeries) : undefined;
       const vo2 = hrSummary ? vo2EstimateFor(settings) : null;
       const maxAfter = hrSummary ? maxHrFor(settings) : null;
       const entry = addSession({
@@ -125,6 +129,7 @@ function WorkoutScreen({ def, warmup, rounds }: { def: ProtocolDef; warmup?: str
             }
           : undefined,
         gps: gpsResult?.gps,
+        efficiency,
       });
       if (gpsResult?.gps.hasRoute) await saveRoute(entry.id, gpsResult.route).catch(() => {});
       if (hrSeries) await saveHrSeries(entry.id, hrSeries).catch(() => {});
