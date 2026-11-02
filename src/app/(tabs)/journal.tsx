@@ -55,6 +55,15 @@ export default function JournalScreen() {
     [state.sessions],
   );
 
+  const peakTrend = useMemo(
+    () =>
+      state.sessions
+        .filter((s) => s.hr !== undefined && (s.hr.sustainedMax || s.hr.max) > 0)
+        .map((s) => ({ at: s.startedAt, value: (s.hr?.sustainedMax || s.hr?.max) as number }))
+        .sort((a, b) => a.at - b.at),
+    [state.sessions],
+  );
+
   const totalMinutes = Math.round(state.sessions.reduce((sum, s) => sum + s.durationSec, 0) / 60);
 
   const header = (
@@ -94,16 +103,24 @@ export default function JournalScreen() {
         <Vo2EstimateCard estimate={estimate} history={estimateHistory} />
       </FadeIn>
 
-      {recoveryTrend.length > 0 ? (
+      {peakTrend.length > 0 || recoveryTrend.length > 0 ? (
         <FadeIn delay={160} style={[styles.trends, { marginTop: 12 }]}>
           <TrendCard
-            label="HR recovery · 60 s"
+            label="Peak HR · 10 s"
+            unit="bpm"
+            points={peakTrend}
+            color={colors.amber}
+            decimals={0}
+            emptyHint="Appears after a workout with heart rate"
+          />
+          <TrendCard
+            label="HR recovery"
             unit="bpm drop"
             points={recoveryTrend}
             color={colors.crimson}
             decimals={0}
             higherIsBetter
-            emptyHint="Appears after a workout with heart rate"
+            emptyHint="Needs full hard intervals with heart rate"
           />
         </FadeIn>
       ) : null}

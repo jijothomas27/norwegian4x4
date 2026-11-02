@@ -32,6 +32,7 @@ type Action =
   | { type: 'hydrate'; state: PersistedState }
   | { type: 'addSession'; entry: SessionEntry }
   | { type: 'deleteSession'; id: string }
+  | { type: 'updateSession'; id: string; patch: Partial<Omit<SessionEntry, 'id' | 'type'>> }
   | { type: 'addMetric'; entry: MetricEntry }
   | { type: 'deleteMetric'; id: string }
   | { type: 'updateSettings'; patch: Partial<Settings> };
@@ -44,6 +45,8 @@ function reducer(state: StoreState, action: Action): StoreState {
       return { ...state, sessions: [action.entry, ...state.sessions] };
     case 'deleteSession':
       return { ...state, sessions: state.sessions.filter((s) => s.id !== action.id) };
+    case 'updateSession':
+      return { ...state, sessions: state.sessions.map((s) => (s.id === action.id ? { ...s, ...action.patch } : s)) };
     case 'addMetric':
       return { ...state, metrics: [action.entry, ...state.metrics] };
     case 'deleteMetric':
@@ -57,6 +60,7 @@ interface StoreApi {
   state: StoreState;
   addSession: (entry: Omit<SessionEntry, 'id' | 'type'>) => SessionEntry;
   deleteSession: (id: string) => void;
+  updateSession: (id: string, patch: Partial<Omit<SessionEntry, 'id' | 'type'>>) => void;
   addMetric: (entry: Omit<MetricEntry, 'id' | 'type' | 'at'> & { at?: number }) => MetricEntry;
   deleteMetric: (id: string) => void;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -120,12 +124,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'deleteSession', id });
     deleteRoute(id);
   }, []);
+  const updateSession = useCallback<StoreApi['updateSession']>((id, patch) => dispatch({ type: 'updateSession', id, patch }), []);
   const deleteMetric = useCallback((id: string) => dispatch({ type: 'deleteMetric', id }), []);
   const updateSettings = useCallback((patch: Partial<Settings>) => dispatch({ type: 'updateSettings', patch }), []);
 
   const api = useMemo<StoreApi>(
-    () => ({ state, addSession, deleteSession, addMetric, deleteMetric, updateSettings }),
-    [state, addSession, deleteSession, addMetric, deleteMetric, updateSettings],
+    () => ({ state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings }),
+    [state, addSession, deleteSession, updateSession, addMetric, deleteMetric, updateSettings],
   );
 
   return <StoreContext.Provider value={api}>{children}</StoreContext.Provider>;

@@ -12,7 +12,7 @@ npm install
 npx expo start          # press i (iOS simulator), a (Android) or scan the QR with Expo Go
 ```
 
-Everything used (`expo-haptics`, `expo-speech`, `expo-keep-awake`, `expo-linear-gradient`, `react-native-svg`, AsyncStorage) ships in Expo Go, so no custom dev build is needed.
+Everything used (`expo-haptics`, `expo-speech`, `expo-keep-awake`, `expo-linear-gradient`, `expo-sharing`, `react-native-svg`, `react-native-view-shot`, AsyncStorage) ships in Expo Go, so no custom dev build is needed.
 
 ```bash
 npm run typecheck       # tsc --noEmit
@@ -129,6 +129,23 @@ With location permission (asked the first time you tap Begin), the background se
 - **Summary / journal:** total distance, hard-interval pace and climb; a per-round table (pace, distance, heart-rate recovery); and a route sketch coloured by stage — drawn with SVG, so no map API key or network is needed. Tap any session in the journal to open it.
 - Fixes with poor accuracy and impossible jumps are dropped, paused time is left out (`src/domain/track.ts`, `tests/track.test.ts`). Routes are stored per session under their own storage key (`src/state/routes.ts`).
 - `plugins/withWorkoutLocation.js` makes sure the location permission is declared for modern Android — react-native-ble-manager's `neverForLocation` option would otherwise cap it at Android 11.
+
+## Fitness numbers after each workout
+
+The summary shows two tiles whenever heart rate was recorded:
+
+- **Est. VO₂ max** — this session's estimate and the change since the last one. If resting heart rate isn't set yet, the tile becomes *Add resting HR*; once you add it, the session you're looking at is filled in.
+- **Peak HR · 10 s** — the highest heart rate you held for 10 seconds, and **New max HR** when it raised your known max (each session stores the max in effect after it: `SessionEntry.maxHr`).
+
+The journal has a *Peak HR* trend next to *HR recovery*.
+
+## Sharing a workout
+
+*Share workout* on the summary opens a preview of a share card — date, protocol, rounds and time, four headline numbers (`src/domain/shareStats.ts` picks them: time in zone, peak HR, VO₂ and distance for the 4×4; distance and brisk pace first for walks), the route shape and a *New max heart rate* badge. It's captured at 1080 px wide (2:3 with the route, square without) with `react-native-view-shot` and handed to the system share sheet with `expo-sharing`. The route can be switched off; *Share as text* sends a one-line summary instead.
+
+## Live heart rate on the timer
+
+Heart rate is a large number coloured by zone — the stage colour when on target, amber when too high, blue when too low — with the panel outlined in the same colour. **Tap the panel (or the ring) to swap**: heart rate goes big inside the ring and the stage countdown moves to the panel. The choice is remembered.
 
 ## Heart-rate recovery
 

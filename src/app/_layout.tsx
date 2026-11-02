@@ -49,6 +49,7 @@ export default function RootLayout() {
               options={{ presentation: 'fullScreenModal', animation: 'fade', gestureEnabled: false }}
             />
             <Stack.Screen name="log" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="share" options={{ presentation: 'modal' }} />
             <Stack.Screen name="heart-rate" options={{ presentation: 'modal' }} />
             <Stack.Screen name="voice" options={{ presentation: 'modal' }} />
             <Stack.Screen name="resting-check" options={{ presentation: 'fullScreenModal', animation: 'fade' }} />

@@ -116,13 +116,34 @@ const styles = StyleSheet.create({
   },
 });
 
-export function HeartRateNumber({ bpm, color }: { bpm: number | null; color: string }) {
+export function HeartRateNumber({
+  bpm,
+  color,
+  size = 34,
+  valueColor = colors.text,
+}: {
+  bpm: number | null;
+  /** Colour of the "bpm" label. */
+  color: string;
+  size?: number;
+  valueColor?: string;
+}) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-      <AppText style={{ fontSize: 34, fontWeight: '300', letterSpacing: -1, color: colors.text, fontVariant: ['tabular-nums'] }}>
+      <AppText
+        maxFontSizeMultiplier={1.15}
+        style={{
+          fontSize: size,
+          lineHeight: Math.round(size * 1.1),
+          fontWeight: size >= 48 ? '500' : '300',
+          letterSpacing: size >= 48 ? -2 : -1,
+          color: valueColor,
+          fontVariant: ['tabular-nums'],
+        }}
+      >
         {bpm ?? '—'}
       </AppText>
-      <AppText variant="caption" color={color} style={{ marginLeft: 4 }}>
+      <AppText variant="caption" color={color} style={{ marginLeft: 4, fontSize: size >= 48 ? 15 : 13 }}>
         bpm
       </AppText>
     </View>
